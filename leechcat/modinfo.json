@@ -1,0 +1,10 @@
+﻿{
+	"id": "leechcat",
+	"name": "Leechcat",
+	"version": "0.1",
+	"authors": "WatcherMagic",
+	"description": "A template for making SlugBase mods.",
+	"requirements": [ "slime-cubed.slugbase" ],
+	"requirements_names": [ "SlugBase" ],
+	"tags": [ "Custom Slugcat" ]
+}

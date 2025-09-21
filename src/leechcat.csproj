@@ -1,0 +1,79 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <LangVersion>11</LangVersion>
+        <DebugType>portable</DebugType>
+        <RootNamespace>SlugTemplate</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="..\..\Reference\BepInEx\core\BepInEx.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\BepInEx\plugins\HOOKS-Assembly-CSharp.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\Mono.Cecil.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\Mono.Cecil.Rocks.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\MonoMod.RuntimeDetour.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\MonoMod.Utils.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\lib\*.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\UnityEngine.CoreModule.dll">
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="..\..\Reference\RainWorld_Data\Managed\UnityEngine.dll">
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Mono.Cecil.Mdb">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\Mono.Cecil.Mdb.dll</HintPath>
+        </Reference>
+        <Reference Include="Mono.Cecil.Pdb">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\Mono.Cecil.Pdb.dll</HintPath>
+        </Reference>
+        <Reference Include="MonoMod.Common">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\MonoMod.Common.dll</HintPath>
+        </Reference>
+        <Reference Include="MonoMod.RuntimeDetour">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\MonoMod.RuntimeDetour.dll</HintPath>
+        </Reference>
+        <Reference Include="MonoMod.Utils">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\MonoMod.Utils.dll</HintPath>
+        </Reference>
+        <Reference Include="Assembly-CSharp">
+            <HintPath>..\..\Reference\BepInEx\utils\PUBLIC-Assembly-CSharp.dll</HintPath>
+        </Reference>
+        <Reference Include="Unity.Mathematics">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\Unity.Mathematics.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.InputLegacyModule">
+            <HintPath>..\..\Reference\RainWorld_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+    
+    <Target Name="GenerateMod" AfterTargets="PostBuildEvent">
+		<ItemGroup>
+			<RemovePlugins Include="../leechcat/plugins/*.dll" />
+		</ItemGroup>
+		<ItemGroup>
+			<CopyPlugins Include="$(TargetPath)" />
+		</ItemGroup>
+		
+        <Delete Files="@(RemovePlugins)" />
+        <Copy SourceFiles="@(CopyPlugins)" DestinationFolder="../leechcat/plugins/" />
+    </Target>
+    
+</Project>

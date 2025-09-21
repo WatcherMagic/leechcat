@@ -1,0 +1,20 @@
+{
+	"id": "leechcat",
+	"name": "The Leech",
+	"description": "",
+	"features": {
+		"color": "e10000",
+		
+		"weight": 4,
+		"food_min": 7,
+		"food_max": 10,
+		"diet": {
+			"corpses": 0.5,
+			"plants": 0,
+			"meat": 0.25
+		},
+
+		"select_menu_scene": "Slugcat_LeechCat",
+		"select_menu_scene_ascended": "Ghost_LeechCat"
+	}
+}
