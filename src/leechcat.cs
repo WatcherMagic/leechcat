@@ -1,4 +1,8 @@
-﻿using BepInEx;
+﻿#define DEVELOPMENT_BUILD
+
+using BepInEx;
+using MonoMod.RuntimeDetour;
+using MoreSlugcats;
 
 namespace SlugTemplate
 {
@@ -10,15 +14,18 @@ namespace SlugTemplate
         public void OnEnable()
         {
             On.Player.LungUpdate += LeechCatLungs;
-
-            On.Player.Grabability += LeechCatGrab;
-
+            On.Player.Grabability += LeechCatGrabability;
+            On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
+            On.Player.GrabUpdate += LeechCatGrabUpdate;
+            On.Player.Grabbed += LeechCatEscapeGrab;
+            
             On.Leech.Attached += LeechLetGoOfLeechCat;
+
         }
-        
+
         private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
         {
-            if (self.slugcatStats.name.value == MOD_ID)
+            if (self.slugcatStats.name.value == MOD_ID && self.submerged)
             {
                 self.airInLungs = 1f;
             }
@@ -27,43 +34,132 @@ namespace SlugTemplate
                 orig(self);
             }
         }
-        
-        private Player.ObjectGrabability LeechCatGrab(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
-        {
-            if (self.slugcatStats.name.value == MOD_ID)
-            {
-                Debug.Log("Leechcat is grabbing! Target: " + obj.GetType());
-                
-                if (obj is Creature)
-                {
-                    Debug.Log("Leechcat: Check for grab target is creature passed");
-                    if (!(obj as Creature).Template.smallCreature )
-                    {
-                        Debug.Log("Leechcat: Grab target is not a small creature!");
 
-                        Debug.Log("Leechcat: self.dontGrabStuff: " + self.dontGrabStuff);
-                        if (self.dontGrabStuff < 1)
-                        {
-                            Debug.Log("Leechcat: self.dontGrabStuff < 1!");
-                            Debug.Log("Returning grabbability.Drag!");
-                            return Player.ObjectGrabability.Drag;
-                        }
-                    }
+        private PhysicalObject lastPotentialGrab = null;
+        private PhysicalObject lastPickupCandidate = null;
+        private Player.ObjectGrabability LeechCatGrabability(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
+        {
+            if (obj != null && (lastPotentialGrab == null || obj.GetType() != lastPotentialGrab.GetType()))
+            {
+                string message = "New potential grab: " + obj.GetType();
+                
+                if (obj.GetType() == typeof(Creature) && !(obj as Creature).Template.smallCreature)
+                {
+                    message += ", is a large creature!";
                 }
+
+                Logger.LogInfo(message);
+                Debug.LogInfo("LeechCat: New potential grab: " + obj.GetType());
+                lastPotentialGrab = obj;
+            }
+
+            if (self.pickUpCandidate != null 
+                && (lastPickupCandidate == null || lastPickupCandidate.GetType() != self.pickUpCandidate.GetType()))
+            {
+                string message = "New pickup candidate: " + self.pickUpCandidate.GetType();
+                if (self.pickUpCandidate.GetType() == typeof(Creature) && !(self.pickUpCandidate as Creature).Template.smallCreature)
+                {
+                    message += ", is a large creature!";
+                }
+                
+                Logger.LogInfo(message);
+                Debug.LogInfo("LeechCat: New pickup candidate: " + self.pickUpCandidate.GetType());
+                lastPickupCandidate = self.pickUpCandidate;
+            }
+            
+            if (self.SlugCatClass.value == MOD_ID)
+            {
+                if (obj is Creature && !(obj as Creature).Template.smallCreature)
+                {
+                    if (obj.GetType() == typeof(Player))
+                    {
+                        return orig(self, obj);
+                    }
+
+                    Player.ObjectGrabability checkForTwoHandCreature = orig(self, obj);
+                    if (checkForTwoHandCreature != Player.ObjectGrabability.TwoHands)
+                    {
+                        Logger.LogInfo("Returning Drag!");
+                        return Player.ObjectGrabability.Drag;
+                    }
+
+                    Logger.LogInfo("Returning two hands!");
+                    return checkForTwoHandCreature;
+                }
+                
+                return orig(self, obj);
+                
                 //add ability to grab leeches and eat them
             }
             
             return orig(self, obj);
         }
         
+        private bool LeechCatCreatureHoldWithoutStun(On.Player.orig_IsCreatureLegalToHoldWithoutStun orig, Player self, Creature grabCheck)
+        {
+            Logger.LogInfo("Entered Leechcat creature legal to hold without stun hook");
+            Debug.LogInfo("LeechCat: Entered Leechcat creature legal to hold without stun hook");
+            
+            if (self.slugcatStats.name.value == MOD_ID)
+            {
+                Logger.LogInfo("Player is Leechcat, returning true!");
+                Debug.LogInfo("LeechCat: Player is Leechcat, returning true!");
+                
+                return true;
+            }
+
+            return orig(self, grabCheck);
+        }
+        
+        private void LeechCatGrabUpdate(On.Player.orig_GrabUpdate orig, Player self, bool eu)
+        {
+
+            if (self.SlugCatClass.value == MOD_ID)
+            {
+                if (self.grasps[0] != null && self.grasps[0].grabbed != null)
+                {
+                    string message = "Grabbed " + self.grasps[0].grabbed.GetType() + ", ";
+                    
+                    if (self.grasps[1] != null && self.grasps[1].grabbed != null)
+                    {
+                        message += self.grasps[1].grabbed.GetType();
+                    }
+
+                    Logger.LogInfo(message);
+                }
+            
+                orig(self, eu);
+            }
+            else
+            {
+                orig(self, eu);
+            }
+        }
+        
+        private void LeechCatEscapeGrab(On.Player.orig_Grabbed orig, Player self, Creature.Grasp grasp)
+        {
+            orig(self, grasp);
+
+            if (self.dangerGrasp != null)
+            {
+                for (int i = 0; i < grasp.grabber.grasps.Length; i++)
+                {
+                    if (grasp.grabber.grasps[i].grabbed == self && !self.dead)
+                    {
+                        grasp.grabber.ReleaseGrasp(i);
+                    }
+                }
+            }
+        }
+        
         private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
         {
             BodyChunk grabbedChunk = self.grasps[0].grabbed.bodyChunks[self.grasps[0].chunkGrabbed];
-            if (grabbedChunk.owner is Player && (grabbedChunk.owner as Player).slugcatStats.name.value == MOD_ID)
+            if (grabbedChunk.owner is Player && (grabbedChunk.owner as Player).SlugCatClass.value == MOD_ID)
             {
                 self.LoseAllGrasps();
             }
-            Debug.Log("Leech let go of leechcat!");
+            Debug.LogInfo("Leech let go of leechcat!");
             
             orig(self);
         }
