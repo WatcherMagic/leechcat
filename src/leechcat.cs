@@ -11,6 +11,9 @@ namespace SlugTemplate
     {
         private const string MOD_ID = "leechcat";
 
+        private int drainKeyHeldCounter = 0;
+        private const int DRAIN_KEY_HELD_THRESHOLD = 20;
+        
         public void OnEnable()
         {
             On.Player.LungUpdate += LeechCatLungs;
@@ -35,8 +38,6 @@ namespace SlugTemplate
             }
         }
 
-        private PhysicalObject lastPotentialGrab = null;
-        private PhysicalObject lastPickupCandidate = null;
         private Player.ObjectGrabability LeechCatGrabability(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
         {   
             if (self.SlugCatClass.value == MOD_ID)
@@ -80,22 +81,39 @@ namespace SlugTemplate
 
             return orig(self, grabCheck);
         }
-        
+
+        private bool loggedDrain = false;
         private void LeechCatGrabUpdate(On.Player.orig_GrabUpdate orig, Player self, bool eu)
         {
-
             if (self.SlugCatClass.value == MOD_ID)
             {
-                if (self.grasps[0] != null && self.grasps[0].grabbed != null)
+                if (self.grasps[0] != null && self.grasps[0].grabbed != null 
+                                           && self.grasps[0].grabbed is Creature
+                                           && !(self.grasps[0].grabbed as Creature).dead)
                 {
-                    string message = "Grabbed " + self.grasps[0].grabbed.GetType() + ", ";
-                    
-                    if (self.grasps[1] != null && self.grasps[1].grabbed != null)
+                    if (self.input[0].pckp)
                     {
-                        message += self.grasps[1].grabbed.GetType();
-                    }
+                        drainKeyHeldCounter++;
 
-                    Logger.LogInfo(message);
+                        if (drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
+                        {
+                            //drain creature's oxygen and give it to leechcat
+                            Creature grabbedCreature = self.grasps[0].grabbed as Creature;
+                            if (!loggedDrain)
+                            {
+                                Logger.LogInfo("Draining " + grabbedCreature.GetType());
+                                Debug.LogInfo("LeechCat: Draining " + grabbedCreature.GetType());
+                            }
+                            loggedDrain = true;
+                            
+                            //
+                        }
+                    }
+                    else if (!self.input[0].pckp && self.input[1].pckp)
+                    {
+                        loggedDrain = false;
+                        drainKeyHeldCounter = 0;
+                    }
                 }
             
                 orig(self, eu);
