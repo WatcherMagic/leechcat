@@ -38,35 +38,7 @@ namespace SlugTemplate
         private PhysicalObject lastPotentialGrab = null;
         private PhysicalObject lastPickupCandidate = null;
         private Player.ObjectGrabability LeechCatGrabability(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
-        {
-            if (obj != null && (lastPotentialGrab == null || obj.GetType() != lastPotentialGrab.GetType()))
-            {
-                string message = "New potential grab: " + obj.GetType();
-                
-                if (obj.GetType() == typeof(Creature) && !(obj as Creature).Template.smallCreature)
-                {
-                    message += ", is a large creature!";
-                }
-
-                Logger.LogInfo(message);
-                Debug.LogInfo("LeechCat: New potential grab: " + obj.GetType());
-                lastPotentialGrab = obj;
-            }
-
-            if (self.pickUpCandidate != null 
-                && (lastPickupCandidate == null || lastPickupCandidate.GetType() != self.pickUpCandidate.GetType()))
-            {
-                string message = "New pickup candidate: " + self.pickUpCandidate.GetType();
-                if (self.pickUpCandidate.GetType() == typeof(Creature) && !(self.pickUpCandidate as Creature).Template.smallCreature)
-                {
-                    message += ", is a large creature!";
-                }
-                
-                Logger.LogInfo(message);
-                Debug.LogInfo("LeechCat: New pickup candidate: " + self.pickUpCandidate.GetType());
-                lastPickupCandidate = self.pickUpCandidate;
-            }
-            
+        {   
             if (self.SlugCatClass.value == MOD_ID)
             {
                 if (obj is Creature && !(obj as Creature).Template.smallCreature)
@@ -79,11 +51,9 @@ namespace SlugTemplate
                     Player.ObjectGrabability checkForTwoHandCreature = orig(self, obj);
                     if (checkForTwoHandCreature != Player.ObjectGrabability.TwoHands)
                     {
-                        Logger.LogInfo("Returning Drag!");
                         return Player.ObjectGrabability.Drag;
                     }
 
-                    Logger.LogInfo("Returning two hands!");
                     return checkForTwoHandCreature;
                 }
                 
