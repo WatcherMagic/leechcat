@@ -14,7 +14,7 @@
 			"meat": 0.25
 		},
 
-		"select_menu_scene": "Slugcat_LeechCat",
-		"select_menu_scene_ascended": "Ghost_LeechCat"
+		"select_menu_scene": "Slugcat_Leech",
+		"select_menu_scene_ascended": "Ghost_Leech"
 	}
 }
