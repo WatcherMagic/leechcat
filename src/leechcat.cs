@@ -3,6 +3,7 @@
 using BepInEx;
 using MonoMod.RuntimeDetour;
 using MoreSlugcats;
+using UnityEngine;
 
 namespace SlugTemplate
 {
@@ -11,21 +12,29 @@ namespace SlugTemplate
     {
         private const string MOD_ID = "leechcat";
 
-        private int drainKeyHeldCounter = 0;
+        private int _drainKeyHeldCounter = 0;
         private const int DRAIN_KEY_HELD_THRESHOLD = 20;
         
         public void OnEnable()
         {
+            LoadManualHooks();
+            
             On.Player.LungUpdate += LeechCatLungs;
             On.Player.Grabability += LeechCatGrabability;
             On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
             On.Player.GrabUpdate += LeechCatGrabUpdate;
             On.Player.Grabbed += LeechCatEscapeGrab;
+
+            On.AirBreatherCreature.Update += LeechCatAirBreatherDrainUpdate;
             
             On.Leech.Attached += LeechLetGoOfLeechCat;
-
         }
 
+        private void LoadManualHooks()
+        {
+            //
+        }
+        
         private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
         {
             if (self.slugcatStats.name.value == MOD_ID && self.submerged)
@@ -68,14 +77,8 @@ namespace SlugTemplate
         
         private bool LeechCatCreatureHoldWithoutStun(On.Player.orig_IsCreatureLegalToHoldWithoutStun orig, Player self, Creature grabCheck)
         {
-            Logger.LogInfo("Entered Leechcat creature legal to hold without stun hook");
-            Debug.LogInfo("LeechCat: Entered Leechcat creature legal to hold without stun hook");
-            
             if (self.slugcatStats.name.value == MOD_ID)
             {
-                Logger.LogInfo("Player is Leechcat, returning true!");
-                Debug.LogInfo("LeechCat: Player is Leechcat, returning true!");
-                
                 return true;
             }
 
@@ -93,26 +96,48 @@ namespace SlugTemplate
                 {
                     if (self.input[0].pckp)
                     {
-                        drainKeyHeldCounter++;
+                        _drainKeyHeldCounter++;
 
-                        if (drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
+                        if (_drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
                         {
                             //drain creature's oxygen and give it to leechcat
                             Creature grabbedCreature = self.grasps[0].grabbed as Creature;
                             if (!loggedDrain)
                             {
                                 Logger.LogInfo("Draining " + grabbedCreature.GetType());
-                                Debug.LogInfo("LeechCat: Draining " + grabbedCreature.GetType());
+                                UnityEngine.Debug.Log("LeechCat: Draining " + grabbedCreature.GetType());
                             }
-                            loggedDrain = true;
+
+                            //this check doesn't work properly!
+                            if (grabbedCreature.GetType() == typeof(AirBreatherCreature))
+                            {
+                                
+                            //     if (!loggedDrain)
+                            //     {
+                            //         Logger.LogInfo("Passed air breather creature check!");
+                            //     }
+                            //     
+                            //     AirBreatherCreature grabbedCreatureLungs = grabbedCreature as AirBreatherCreature;
+                            //     //took the maths from AirBreatherCreature.Update
+                            //     grabbedCreatureLungs.lungs =
+                            //         Mathf.Max(0f, grabbedCreatureLungs.lungs - 1f / grabbedCreatureLungs.Template.lungCapacity);
+                            //     Logger.LogInfo("Draining creature's air! Creature lungs is " +
+                            //                    grabbedCreatureLungs.lungs);
+                            }
+                            else
+                            {
+                                DrainNonAirBreatherCreature(grabbedCreature);
+                            }
+                            //grabbedCreature.Template.lungCapacity
                             
-                            //
+                            
+                            loggedDrain = true;
                         }
                     }
                     else if (!self.input[0].pckp && self.input[1].pckp)
                     {
                         loggedDrain = false;
-                        drainKeyHeldCounter = 0;
+                        _drainKeyHeldCounter = 0;
                     }
                 }
             
@@ -122,6 +147,26 @@ namespace SlugTemplate
             {
                 orig(self, eu);
             }
+        }
+
+        private void DrainNonAirBreatherCreature(Creature creatureToDrain)
+        {
+            Logger.LogInfo("Entered DrainNonAirBreatherCreature()!");
+
+            if (creatureToDrain.State is HealthState)
+            {   
+                /*I'm not entirely sure how this works cause CreatureState doesn't seem to
+                 inherit from HealthState, but this is how they do it in Creature.Update() so
+                 this is what we're doing*/
+                HealthState creatureHealth = creatureToDrain.State as HealthState;
+                Logger.LogInfo("Draining non air breather creature! Creature health is " + creatureHealth.health);
+                UnityEngine.Debug.Log("LeechCat: Draining non air breather creature! Creature health is " + creatureHealth.health);
+                creatureHealth.health -= 0.004f / creatureToDrain.Template.baseDamageResistance;
+            }
+            
+            //yoinked from poison code in Creature.Update()
+            // HealthState healthState = state;
+            // healthState.health = healthState.health - (single2 - this.injectedPoison) / this.Template.baseDamageResistance;
         }
         
         private void LeechCatEscapeGrab(On.Player.orig_Grabbed orig, Player self, Creature.Grasp grasp)
@@ -140,6 +185,11 @@ namespace SlugTemplate
             }
         }
         
+        private void LeechCatAirBreatherDrainUpdate(On.AirBreatherCreature.orig_Update orig, AirBreatherCreature self, bool eu)
+        {
+            orig(self, eu);
+        }
+        
         private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
         {
             BodyChunk grabbedChunk = self.grasps[0].grabbed.bodyChunks[self.grasps[0].chunkGrabbed];
@@ -147,7 +197,7 @@ namespace SlugTemplate
             {
                 self.LoseAllGrasps();
             }
-            Debug.LogInfo("Leech let go of leechcat!");
+            UnityEngine.Debug.Log("Leech let go of leechcat!");
             
             orig(self);
         }
