@@ -111,9 +111,10 @@ namespace SlugTemplate
                                 UnityEngine.Debug.Log("LeechCat: Draining " + grabbedCreature.GetType());
                             }
 
-                            //this check doesn't work properly!
                             if (grabbedCreature is AirBreatherCreature)
                             {
+                                //Logger.LogInfo("Detected air breather creature, setting drained to true");
+                                //UnityEngine.Debug.Log("LeechCat: Detected air breather creature, setting drained to true");
                                 customAirData.beingDrained = true;
 
                                 //     if (!loggedDrain)
@@ -186,14 +187,14 @@ namespace SlugTemplate
         {
             if (creatureBeingDrainedTable.GetOrCreateValue(self).beingDrained)
             {
-                Logger.LogInfo("Draining air breather creature! Lungs are at " + self.lungs);
-                UnityEngine.Debug.Log("LeechCat: Draining air breather creature! Lungs: " + self.lungs);
+                Logger.LogInfo("Draining " + self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
+                UnityEngine.Debug.Log("LeechCat: Draining " + self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
                 //self.lungs = Mathf.Max(-1f, self.lungs - 1f / self.Template.lungCapacity);
             }
             else if (self.lungs != 1f)
             {
-                //Logger.LogInfo("Creature's lungs refilling! Lungs: " + self.lungs);
-                //UnityEngine.Debug.Log("LeechCat: Creature's lungs refilling: " + self.lungs);
+                Logger.LogInfo(self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
+                UnityEngine.Debug.Log(self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
             }
             
             orig(self, eu);
@@ -205,19 +206,7 @@ namespace SlugTemplate
             {
                 ILCursor c = new ILCursor(il);
                 
-                c.GotoNext(MoveType.After,
-                    c => c.MatchDiv(),
-                    c => c.MatchSub(),
-                    c => c.MatchCallOrCallvirt<Mathf>(nameof(Mathf.Max)),
-                    c => c.MatchStfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)),
-                    c => c.MatchRet());
-                c.MoveAfterLabels();
-                ILLabel checkDrainInsertPoint = c.MarkLabel();
-                c.EmitDelegate(() =>
-                {
-                    Logger.LogInfo("Reached check for lung fill conditions beginning");
-                });
-                
+                //Confirmed
                 c.GotoNext(MoveType.Before,
                     c => c.MatchLdarg(0),
                     c => c.MatchLdarg(0),
@@ -225,44 +214,87 @@ namespace SlugTemplate
                     c => c.MatchLdcR4(0.033333335f),
                     c => c.MatchAdd());
                 c.MoveAfterLabels();
+                ILLabel matchBrFalse = c.MarkLabel();
+                Logger.LogInfo("\nReached refill lungs point: " + c.ToString());
                 c.EmitDelegate(() =>
                 {
                     Logger.LogInfo("Reached refill lungs equation");
                 });
 
+                //Confirmed
                 c.GotoNext(MoveType.Before,
                     c => c.MatchLdarg(0),
                     c => c.MatchLdcR4(-1),
                     c => c.MatchLdarg(0),
-                    c => c.MatchLdfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)),
-                    c => c.MatchLdcR4(1)); //,
-                //     c => c.MatchLdarg(0),
-                //     c => c.MatchCallOrCallvirt<CreatureTemplate>(nameof(Creature.Template)),
-                //     c => c.MatchLdfld<CreatureTemplate>(nameof(CreatureTemplate.lungCapacity)),
-                //     c => c.MatchDiv(),
-                //     c => c.MatchSub(),
-                //     c => c.MatchCallOrCallvirt<Mathf>(nameof(Mathf.Max))); //,
-                //     // c => c.MatchStfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)));
+                    c => c.MatchLdfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)));
                 c.MoveAfterLabels();
-                ILLabel drowningLogicPoint = c.MarkLabel();
-                c.EmitDelegate(() =>
-                {
-                    Logger.LogInfo("Reached lung drain equation");
-                });
+                ILLabel drainingTrueJumpPoint = c.MarkLabel();
+                Logger.LogInfo("\nReached draining jump point: " + c.ToString());
 
-                c.GotoLabel(checkDrainInsertPoint);
-                 c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
-                 c.EmitDelegate((AirBreatherCreature creature) =>
-                 {
-                     if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
-                     {
-                         Logger.LogInfo("IL beingDrained check returned true!");
-                         return true;
-                     }
-                     Logger.LogInfo("IL beingDrained check returned false!");
-                     return false;
-                 });
-                c.Emit(OpCodes.Brtrue, drowningLogicPoint);
+                ILLabel jumpPoint = null;
+                c.GotoPrev(MoveType.Before,
+                    c => c.MatchLdarg(0),
+                    c => c.MatchLdfld<UpdatableAndDeletable>(nameof(UpdatableAndDeletable.room)),
+                    c => c.MatchBrfalse(out jumpPoint));
+                Logger.LogInfo("JumpPoint target: " + jumpPoint.Target);
+                Logger.LogInfo("JumpPoint branch: " + jumpPoint.Branches);
+                Logger.LogInfo("matchBrFalse target: " + matchBrFalse.Target);
+                Logger.LogInfo("matchBrFalse branch: " + matchBrFalse.Branches);
+                if (jumpPoint != null && jumpPoint.Target == matchBrFalse.Target)
+                {
+                    Logger.LogInfo("\nReached draining insertion point: " + c.ToString());
+                    c.MoveAfterLabels();
+                    c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
+                    c.EmitDelegate<Func<AirBreatherCreature, bool>>((AirBreatherCreature creature) =>
+                    {
+                        if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
+                        {
+                            Logger.LogInfo("IL beingDrained check returned true!");
+                            return true;
+                        }
+                        Logger.LogInfo("IL beingDrained check returned false!");
+                        return false;
+                    });
+                    c.Emit(OpCodes.Brtrue, drainingTrueJumpPoint);
+                }
+                else
+                {
+                    Logger.LogError("Found the wrong insertion point for skipping lung refill if being drained: " + c.ToString() + "Fill lungs skip will not be emitted!");
+                }
+
+                // c.GotoNext(MoveType.Before,
+                //     c => c.MatchLdarg(0),
+                //     c => c.MatchLdcR4(-1),
+                //     c => c.MatchLdarg(0),
+                //     c => c.MatchLdfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)),
+                //     c => c.MatchLdcR4(1)); //,
+                // //     c => c.MatchLdarg(0),
+                // //     c => c.MatchCallOrCallvirt<CreatureTemplate>(nameof(Creature.Template)),
+                // //     c => c.MatchLdfld<CreatureTemplate>(nameof(CreatureTemplate.lungCapacity)),
+                // //     c => c.MatchDiv(),
+                // //     c => c.MatchSub(),
+                // //     c => c.MatchCallOrCallvirt<Mathf>(nameof(Mathf.Max))); //,
+                // //     // c => c.MatchStfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)));
+                // c.MoveAfterLabels();
+                // ILLabel drowningLogicPoint = c.MarkLabel();
+                // c.EmitDelegate(() =>
+                // {
+                //     Logger.LogInfo("Reached lung drain equation");
+                // });
+                //
+                // c.GotoLabel(checkDrainInsertPoint);
+                //  c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
+                //  c.EmitDelegate((AirBreatherCreature creature) =>
+                //  {
+                //      if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
+                //      {
+                //          Logger.LogInfo("IL beingDrained check returned true!");
+                //          return true;
+                //      }
+                //      Logger.LogInfo("IL beingDrained check returned false!");
+                //      return false;
+                //  });
+                // c.Emit(OpCodes.Brtrue, drowningLogicPoint);
 
                 Logger.LogInfo(il.ToString());
             }
