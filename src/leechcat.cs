@@ -214,8 +214,6 @@ namespace SlugTemplate
                     c => c.MatchLdcR4(0.033333335f),
                     c => c.MatchAdd());
                 c.MoveAfterLabels();
-                ILLabel matchBrFalse = c.MarkLabel();
-                Logger.LogInfo("\nReached refill lungs point: " + c.ToString());
                 c.EmitDelegate(() =>
                 {
                     Logger.LogInfo("Reached refill lungs equation");
@@ -231,71 +229,20 @@ namespace SlugTemplate
                 ILLabel drainingTrueJumpPoint = c.MarkLabel();
                 Logger.LogInfo("\nReached draining jump point: " + c.ToString());
 
-                ILLabel jumpPoint = null;
-                c.GotoPrev(MoveType.Before,
-                    c => c.MatchLdarg(0),
-                    c => c.MatchLdfld<UpdatableAndDeletable>(nameof(UpdatableAndDeletable.room)),
-                    c => c.MatchBrfalse(out jumpPoint));
-                Logger.LogInfo("JumpPoint target: " + jumpPoint.Target);
-                Logger.LogInfo("JumpPoint branch: " + jumpPoint.Branches);
-                Logger.LogInfo("matchBrFalse target: " + matchBrFalse.Target);
-                Logger.LogInfo("matchBrFalse branch: " + matchBrFalse.Branches);
-                if (jumpPoint != null && jumpPoint.Target == matchBrFalse.Target)
-                {
-                    Logger.LogInfo("\nReached draining insertion point: " + c.ToString());
-                    c.MoveAfterLabels();
-                    c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
-                    c.EmitDelegate<Func<AirBreatherCreature, bool>>((AirBreatherCreature creature) =>
-                    {
-                        if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
-                        {
-                            Logger.LogInfo("IL beingDrained check returned true!");
-                            return true;
-                        }
-                        Logger.LogInfo("IL beingDrained check returned false!");
-                        return false;
-                    });
-                    c.Emit(OpCodes.Brtrue, drainingTrueJumpPoint);
-                }
-                else
-                {
-                    Logger.LogError("Found the wrong insertion point for skipping lung refill if being drained: " + c.ToString() + "Fill lungs skip will not be emitted!");
-                }
-
-                // c.GotoNext(MoveType.Before,
-                //     c => c.MatchLdarg(0),
-                //     c => c.MatchLdcR4(-1),
-                //     c => c.MatchLdarg(0),
-                //     c => c.MatchLdfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)),
-                //     c => c.MatchLdcR4(1)); //,
-                // //     c => c.MatchLdarg(0),
-                // //     c => c.MatchCallOrCallvirt<CreatureTemplate>(nameof(Creature.Template)),
-                // //     c => c.MatchLdfld<CreatureTemplate>(nameof(CreatureTemplate.lungCapacity)),
-                // //     c => c.MatchDiv(),
-                // //     c => c.MatchSub(),
-                // //     c => c.MatchCallOrCallvirt<Mathf>(nameof(Mathf.Max))); //,
-                // //     // c => c.MatchStfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)));
-                // c.MoveAfterLabels();
-                // ILLabel drowningLogicPoint = c.MarkLabel();
-                // c.EmitDelegate(() =>
+                
+                // c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
+                // c.EmitDelegate<Func<AirBreatherCreature, bool>>((AirBreatherCreature creature) =>
                 // {
-                //     Logger.LogInfo("Reached lung drain equation");
+                //     if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
+                //     {
+                //         Logger.LogInfo("IL beingDrained check returned true!");
+                //         return true;
+                //     }
+                //     Logger.LogInfo("IL beingDrained check returned false!");
+                //     return false;
                 // });
-                //
-                // c.GotoLabel(checkDrainInsertPoint);
-                //  c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
-                //  c.EmitDelegate((AirBreatherCreature creature) =>
-                //  {
-                //      if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
-                //      {
-                //          Logger.LogInfo("IL beingDrained check returned true!");
-                //          return true;
-                //      }
-                //      Logger.LogInfo("IL beingDrained check returned false!");
-                //      return false;
-                //  });
-                // c.Emit(OpCodes.Brtrue, drowningLogicPoint);
-
+                // c.Emit(OpCodes.Brtrue, drainingTrueJumpPoint);
+                
                 Logger.LogInfo(il.ToString());
             }
             catch (Exception e)
