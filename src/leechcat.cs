@@ -214,10 +214,10 @@ namespace SlugTemplate
                     
                     //force the game to treat being drained on land like drowning under water
                     ILLabel drowningLogic = c.DefineLabel();
-                    //this attempted branch stops creatures from being drained
-                    //c.EmitDelegate<Func<AirBreatherCreature, bool>>(target => target.lungs <= 0.3);
-                    //c.Emit(OpCodes.Brtrue, drowningLogic);
-                    c.Emit(OpCodes.Br, drowningLogic);
+                    c.Emit(OpCodes.Ldarg_0);
+                    c.Emit(OpCodes.Ldfld, typeof(AirBreatherCreature).GetField(nameof(AirBreatherCreature.lungs)));
+                    c.EmitDelegate<Func<float, bool>>(lungs => lungs <= 0.3);
+                    c.Emit(OpCodes.Brtrue, drowningLogic);
                     c.MarkLabel(passBeingDrainedCheck);
                     
                     c.GotoNext(MoveType.Before,
