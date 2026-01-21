@@ -243,16 +243,19 @@ namespace SlugTemplate
             {
                 return /*0f*/;
             }
-            
-            if (target.Submersion < 1.0f)
+
+            if (target.lungs > 0.3)
             {
-                const float LUNGS_FILL_RATE = 0.033333335f;
-                target.lungs -= LUNGS_FILL_RATE;
-            }
+                if (target.Submersion < 1.0f)
+                {
+                    const float LUNGS_FILL_RATE = 0.033333335f;
+                    target.lungs -= LUNGS_FILL_RATE;
+                }
             
-            if (UnityEngine.Random.value >= 0.0166666675)
-            {
-                target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
+                if (UnityEngine.Random.value >= 0.0166666675)
+                {
+                    target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
+                }
             }
         }
         
