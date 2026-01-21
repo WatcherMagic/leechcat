@@ -2,5 +2,5 @@ namespace SlugTemplate;
 
 public class CustomAirBreatherCreatureData
 {
-    public bool beingDrained;
+    public bool beingDrained = false;
 }

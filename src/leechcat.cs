@@ -16,6 +16,7 @@ namespace SlugTemplate
 
         private int _drainKeyHeldCounter = 0;
         private const int DRAIN_KEY_HELD_THRESHOLD = 20;
+        private bool isDrainingCreature = false;
         
         public ConditionalWeakTable<Creature, CustomAirBreatherCreatureData> creatureBeingDrainedTable = new ();
         
@@ -30,7 +31,7 @@ namespace SlugTemplate
             On.AirBreatherCreature.Update += LeechCatAirBreatherUpdate;
             IL.AirBreatherCreature.Update += LeechCatAirBreatherILUpdate;
             
-            On.Leech.Attached += LeechLetGoOfLeechCat;
+            //On.Leech.Attached += LeechLetGoOfLeechCat;
         }
 
         private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
@@ -83,7 +84,6 @@ namespace SlugTemplate
             return orig(self, grabCheck);
         }
 
-        private bool loggedDrain = false;
         private void LeechCatGrabUpdate(On.Player.orig_GrabUpdate orig, Player self, bool eu)
         {
             if (self.SlugCatClass.value == MOD_ID)
@@ -93,57 +93,57 @@ namespace SlugTemplate
                                            && !(self.grasps[0].grabbed as Creature).dead)
                 {
                     Creature grabbedCreature = self.grasps[0].grabbed as Creature;
-                    CustomAirBreatherCreatureData customAirData = 
-                        creatureBeingDrainedTable.GetOrCreateValue(grabbedCreature);
-                    customAirData.beingDrained = false;
+                    CustomAirBreatherCreatureData customAirData = null;
+
+                    if (grabbedCreature is AirBreatherCreature)
+                    {
+                        customAirData = creatureBeingDrainedTable.GetOrCreateValue(grabbedCreature);
+                    }
                     
                     if (self.input[0].pckp)
                     {
+                        //Logger.LogInfo("Player pressed pickup!");
                         _drainKeyHeldCounter++;
-
-                        if (_drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
+                    }
+                    else
+                    {
+                        //Logger.LogInfo("Player is not pressing pickup!");
+                        _drainKeyHeldCounter = 0;
+                        
+                        if (customAirData != null && customAirData.beingDrained)
                         {
-                            //drain creature's oxygen and give it to leechcat
-                            
-                            if (!loggedDrain)
-                            {
-                                Logger.LogInfo("Draining " + grabbedCreature.GetType());
-                                UnityEngine.Debug.Log("LeechCat: Draining " + grabbedCreature.GetType());
-                            }
-
-                            if (grabbedCreature is AirBreatherCreature)
-                            {
-                                //Logger.LogInfo("Detected air breather creature, setting drained to true");
-                                //UnityEngine.Debug.Log("LeechCat: Detected air breather creature, setting drained to true");
-                                customAirData.beingDrained = true;
-
-                                //     if (!loggedDrain)
-                                //     {
-                                //         Logger.LogInfo("Passed air breather creature check!");
-                                //     }
-                                //     
-                                //     AirBreatherCreature grabbedCreatureLungs = grabbedCreature as AirBreatherCreature;
-                                //     //took the maths from AirBreatherCreature.Update
-                                //     grabbedCreatureLungs.lungs =
-                                //         Mathf.Max(0f, grabbedCreatureLungs.lungs - 1f / grabbedCreatureLungs.Template.lungCapacity);
-                                //     Logger.LogInfo("Draining creature's air! Creature lungs is " +
-                                //                    grabbedCreatureLungs.lungs);
-                            }
-                            else
-                            {
-                                DrainNonAirBreatherCreature(grabbedCreature);
-                            }
-                            //grabbedCreature.Template.lungCapacity
-                            
-                            
-                            loggedDrain = true;
+                            customAirData.beingDrained = false;
+                        }
+                        if (isDrainingCreature)
+                        {
+                            isDrainingCreature = false;
+                            Logger.LogInfo("Setting beingDrained to false!");
+                            UnityEngine.Debug.Log("Leechcat: Stopped draining " + grabbedCreature.Template.name + "!");
                         }
                     }
-                    else if (!self.input[0].pckp && self.input[1].pckp)
+
+                    //creature is being drained & pickup was not released, continue to other logic
+                    if (customAirData != null && customAirData.beingDrained)
                     {
-                        loggedDrain = false;
-                        _drainKeyHeldCounter = 0;
-                        customAirData.beingDrained = false;
+                        orig(self, eu);
+                        return;
+                    }
+
+                    //creature is not being drained yet but conditions have been met to start
+                    if (_drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
+                    {
+                        isDrainingCreature = true;
+                        Logger.LogInfo("Started draining " + grabbedCreature.Template.name + "!");
+                        Debug.Log("Leechcat: Started draining " + grabbedCreature.Template.name + "!");
+                        if (grabbedCreature is AirBreatherCreature && customAirData != null)
+                        {
+                            Logger.LogInfo("Detected air breather creature! Setting beingDrained to true");
+                            customAirData.beingDrained = true;
+                        }
+                        else
+                        {
+                            DrainNonAirBreatherCreature(grabbedCreature);
+                        }
                     }
                 }
             
@@ -185,16 +185,10 @@ namespace SlugTemplate
         
         private void LeechCatAirBreatherUpdate(On.AirBreatherCreature.orig_Update orig, AirBreatherCreature self, bool eu)
         {
-            if (creatureBeingDrainedTable.GetOrCreateValue(self).beingDrained)
+            if (!self.dead && self.lungs < 1f)
             {
-                Logger.LogInfo("Draining " + self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
-                UnityEngine.Debug.Log("LeechCat: Draining " + self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
-                //self.lungs = Mathf.Max(-1f, self.lungs - 1f / self.Template.lungCapacity);
-            }
-            else if (self.lungs != 1f)
-            {
-                Logger.LogInfo(self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
-                UnityEngine.Debug.Log(self.abstractCreature.GetType() + "'s lungs: " + self.lungs);
+                Logger.LogInfo(self.GetType() + "'s lungs: " + self.lungs);
+                UnityEngine.Debug.Log("Leechcat: " + self.GetType() + "'s lungs: " + self.lungs);
             }
             
             orig(self, eu);
@@ -206,44 +200,34 @@ namespace SlugTemplate
             {
                 ILCursor c = new ILCursor(il);
                 
-                //Confirmed
-                c.GotoNext(MoveType.Before,
-                    c => c.MatchLdarg(0),
-                    c => c.MatchLdarg(0),
-                    c => c.MatchLdfld(typeof(AirBreatherCreature).GetField(nameof(AirBreatherCreature.lungs))),
-                    c => c.MatchLdcR4(0.033333335f),
-                    c => c.MatchAdd());
-                c.MoveAfterLabels();
-                c.EmitDelegate(() =>
-                {
-                    Logger.LogInfo("Reached refill lungs equation");
-                });
-
-                //Confirmed
-                c.GotoNext(MoveType.Before,
-                    c => c.MatchLdarg(0),
-                    c => c.MatchLdcR4(-1),
-                    c => c.MatchLdarg(0),
-                    c => c.MatchLdfld<AirBreatherCreature>(nameof(AirBreatherCreature.lungs)));
-                c.MoveAfterLabels();
-                ILLabel drainingTrueJumpPoint = c.MarkLabel();
-                Logger.LogInfo("\nReached draining jump point: " + c.ToString());
-
-                
-                // c.Emit(OpCodes.Ldarg, 0); //load self (AirBreatherCreature)
-                // c.EmitDelegate<Func<AirBreatherCreature, bool>>((AirBreatherCreature creature) =>
-                // {
-                //     if (creatureBeingDrainedTable.GetOrCreateValue(creature).beingDrained)
-                //     {
-                //         Logger.LogInfo("IL beingDrained check returned true!");
-                //         return true;
-                //     }
-                //     Logger.LogInfo("IL beingDrained check returned false!");
-                //     return false;
-                // });
-                // c.Emit(OpCodes.Brtrue, drainingTrueJumpPoint);
-                
-                Logger.LogInfo(il.ToString());
+                    c.GotoNext(MoveType.After,
+                        x => x.MatchLdarg(0),
+                        x => x.MatchCallOrCallvirt(typeof(Creature).GetProperty(nameof(Creature.dead)).GetGetMethod()),
+                        x => x.MatchBrtrue(out _));
+                    c.MoveAfterLabels();
+                    ILLabel passBeingDrainedCheck = c.DefineLabel();
+                    c.Emit(OpCodes.Ldarg_0);
+                    c.EmitDelegate<Func<AirBreatherCreature, bool>>(target => creatureBeingDrainedTable.GetOrCreateValue(target).beingDrained);
+                    c.Emit(OpCodes.Brfalse_S, passBeingDrainedCheck);
+                    c.Emit(OpCodes.Ldarg_0);
+                    c.EmitDelegate(StealAir);
+                    
+                    //force the game to treat being drained on land like drowning under water
+                    ILLabel drowningLogic = c.DefineLabel();
+                    //this attempted branch stops creatures from being drained
+                    //c.EmitDelegate<Func<AirBreatherCreature, bool>>(target => target.lungs <= 0.3);
+                    //c.Emit(OpCodes.Brtrue, drowningLogic);
+                    c.Emit(OpCodes.Br, drowningLogic);
+                    c.MarkLabel(passBeingDrainedCheck);
+                    
+                    c.GotoNext(MoveType.Before,
+                        x => x.MatchLdarg(0),
+                        x => x.MatchLdcR4(-1f),
+                        x => x.MatchLdarg(0));
+                    c.MoveAfterLabels();
+                    c.MarkLabel(drowningLogic);
+                    
+                    Logger.LogInfo(il.ToString());
             }
             catch (Exception e)
             {
@@ -252,17 +236,36 @@ namespace SlugTemplate
                                 + e.GetType() + ": " + e.Message + "\n" + e.StackTrace);
             }
         }
-        
-        private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
+
+        private static void StealAir(AirBreatherCreature target)
         {
-            BodyChunk grabbedChunk = self.grasps[0].grabbed.bodyChunks[self.grasps[0].chunkGrabbed];
-            if (grabbedChunk.owner is Player && (grabbedChunk.owner as Player).SlugCatClass.value == MOD_ID)
+            if (target == null || target.dead)
             {
-                self.LoseAllGrasps();
+                return /*0f*/;
             }
-            UnityEngine.Debug.Log("Leech let go of leechcat!");
             
-            orig(self);
+            if (target.Submersion < 1.0f)
+            {
+                const float LUNGS_FILL_RATE = 0.033333335f;
+                target.lungs -= LUNGS_FILL_RATE;
+            }
+            
+            if (UnityEngine.Random.value >= 0.0166666675)
+            {
+                target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
+            }
         }
+        
+        // private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
+        // {
+        //     BodyChunk grabbedChunk = self.grasps[0].grabbed.bodyChunks[self.grasps[0].chunkGrabbed];
+        //     if (grabbedChunk.owner is Player && (grabbedChunk.owner as Player).SlugCatClass.value == MOD_ID)
+        //     {
+        //         self.LoseAllGrasps();
+        //     }
+        //     UnityEngine.Debug.Log("Leech let go of leechcat!");
+        //     
+        //     orig(self);
+        // }
     }
 }
