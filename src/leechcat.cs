@@ -244,17 +244,27 @@ namespace SlugTemplate
                 return /*0f*/;
             }
 
+            //future improvements:
+            //creatures on land can refill their lungs, but it becomes less effective
+                // the longer they are drained as they get weaker
+            //leechcat gets an ability that can stun creatures for a moment while latched on
+                // most useful for dragging prey underwater
+                // costs a quarter food pip?
+            //lungs drain slightly faster underwater when leechcat is draining
+            //most creatures (read: not scavengers) can't attack leechcat while latched on
+            //bigger creatures can drag leechcat around while attached if not stunned
+            
             if (target.lungs > 0.3)
             {
+                if (UnityEngine.Random.value >= 0.0166666675)
+                {
+                    target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
+                }
+                
                 if (target.Submersion < 1.0f)
                 {
                     const float LUNGS_FILL_RATE = 0.033333335f;
                     target.lungs -= LUNGS_FILL_RATE;
-                }
-            
-                if (UnityEngine.Random.value >= 0.0166666675)
-                {
-                    target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
                 }
             }
         }
