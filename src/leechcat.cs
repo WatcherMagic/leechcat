@@ -69,16 +69,19 @@ namespace SlugTemplate
         private float maxLatchDistance = 100;
         private int canDelatchCounter = 0;
         private const int TIME_UNTIL_CAN_DELATCH = 3;
-        private float? latchOffsetX = null;
-        private float? latchOffsetY = null;
+        // private float? latchOffsetX = null;
+        // private float? latchOffsetY = null;
         private BodyChunk latchedChunk = null;
         
         public ConditionalWeakTable<Creature, CustomLeechCatVariables> creatureBeingDrainedTable = new ();
         
         public void OnEnable()
         {
+            LeechcatEnums.PlayerBodyModeIndex.RegisterValues();
+            
             On.Player.LungUpdate += LeechCatLungs;
             On.Player.Update += LeechCatLatch;
+            IL.Player.Update += LeechCatLatchIL;
             //On.Player.Grabability += LeechCatGrabability;
             //On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
             //On.Player.GrabUpdate += LeechCatGrabUpdate;
@@ -88,15 +91,37 @@ namespace SlugTemplate
             IL.AirBreatherCreature.Update += LeechCatAirBreatherILUpdate;
 
             On.Leech.ConsiderOtherCreature += LeechIgnoreLeechcat;
-
+            
             // On.GraphicsModule.InitiateSprites += InitiateChunkDebugSprites;
             // On.GraphicsModule.DrawSprites += DrawChunkDebugSprites;
             // On.GraphicsModule.AddToContainer += AddChunkDebugSpritesToContainer;
+            
+            Logger.LogInfo("All player BodyModeIndex enums:");
+            foreach (string index in Player.BodyModeIndex.values.entries)
+            {
+                Logger.LogInfo(index);
+            }
         }
 
-        private void ViewChunksAndLatchRange()
+        private void OnDisable()
         {
-            
+            LeechcatEnums.PlayerBodyModeIndex.UnregisterValues();
+        }
+
+        private void LeechCatLatchIL(ILContext il)
+        {
+            try
+            {
+                ILCursor c = new ILCursor(il);
+                
+                
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                Logger.LogError("Exception encountered in IL hook to Player.Update: " 
+                                + e.GetType() + ": " + e.Message + "\n" + e.StackTrace);
+            }
         }
 
         private void LeechCatLatch(On.Player.orig_Update orig, Player self, bool eu)
@@ -125,11 +150,11 @@ namespace SlugTemplate
                             Logger.LogInfo("slugcat chunk rad: " + self.bodyChunks[0].rad);
                             Logger.LogInfo("potential latch chunk rad: " + chunk.rad);
                             
-                            float sizeScale = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
-                            Logger.LogInfo("size scale for chunk: " + sizeScale);
+                            float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
+                            Logger.LogInfo("size factor for chunk: " + sizeFactor);
                             Logger.LogInfo("max latch distance: " + maxLatchDistance);
                             
-                            float effectiveLatchRange = maxLatchDistance * sizeScale;
+                            float effectiveLatchRange = maxLatchDistance * sizeFactor;
                             Logger.LogInfo("effective latch range: " + effectiveLatchRange);
                             Logger.LogInfo("slugcat chunk positon: " + self.bodyChunks[0].pos);
                             Logger.LogInfo("distance: " + (self.bodyChunks[0].pos - chunk.pos).magnitude);
