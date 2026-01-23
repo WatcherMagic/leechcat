@@ -9,6 +9,54 @@ using UnityEngine;
 
 namespace SlugTemplate
 {
+    
+    //leechcat ability plans:
+    //custom poison bite, costs 1 food pip
+        //slows prey, causes weakness, and rarely stuns; can be stacked
+    //stun bite, costs 1/4 food pip
+        //stuns prey for ~1 second; timing it with activation of CreatureSpasmer/thrashing can double stun duration
+    //can't pick up objects; no arms
+        //alternatively, can hold one object in mouth (i.e, for swallowing/tolls)
+    //controls:
+        //shift = pick up thing in mouth?
+        //shift + z = latch onto creature
+        //shift (held while latched) = drain oxygen, also drains food pips on exhausted creatures
+        //z (while latched) = delatch and jump to new point on creature; use to avoid being thrown off
+        //  sticky window/grace period when volunatrily delatched--auto target new latch point
+        //x = stun bite, increases exhaustion
+        //shift + x/c = poison bite, increases exhaustion
+        //arrow keys = move around on creature while latched
+            //cannot bite or drain oxygen while moving
+        //optional: up arrow near pole while latched = hold onto pole
+    //fight mechanics:
+        //leechcat latches onto a creature above water, creature may or may not react
+        //being latched prevents leechcat's oxygen from depleting
+        //hold shift -> oxygen drain, creature panics and starts trying to attack/dislodge leechcat
+        //leechcat's "grip strength" depletes while the creature struggles
+        //press z -> jump to a different location on the body,
+        //  with grip strength refilling rapidly depending on struggle strength
+        //x/c can be used at cost of food pips to stun or poison the creature
+        //timing stun bite with the start of a thrash is "super effective" and doubles stun duration
+        //while oxygen is being depleted, creature's "exhaustion" is increasing
+        //applied poison also increases exhaustion
+        //exhaustion cannot decrease while the creature is stunned
+        //repeat cycle of oxygen drain + stun + poison until creature is exhausted
+        //leechcat receives drag assist on creatures in exhausted state, and can now drain food pips
+        //player options: drag exhausted creature to water for quick kill + advantage, or feed
+        //if feeding on land, exhaustion will gradually decrease;
+        //  when it goes below 100%, player will lose access to food pips and creature will recover slightly
+        //dragging creature will cause creature to start ineffectively struggling, preventing exhaustion recovery
+        //underwater, exhaustion can be maxed out, the creature can drown,
+        //  and leechcat can siphon food pips at maximum rate
+        //creature dies once leechcat has siphoned all its food pips
+    //feeding mechanics:
+        //carcasses have a "decay timer" and are no longer edible after 1-2 minutes
+        //this forces leechcat to rely on live prey, but allows eating from fresh kills and scavenging if lucky
+        //leechcat food pip drain scales depending on how exhausted the prey is:
+        //  100%-125%: 1/4 pip
+        //  125%-150%: 1/2 pip
+        //  175%-200%(max): 1 pip
+    
     [BepInPlugin(MOD_ID, "Leechcat", "0.1.0")]
     class leechcat : BaseUnityPlugin
     {
@@ -17,21 +65,132 @@ namespace SlugTemplate
         private int _drainKeyHeldCounter = 0;
         private const int DRAIN_KEY_HELD_THRESHOLD = 20;
         private bool isDrainingCreature = false;
+        private bool currentlyLatched = false;
+        private float maxLatchDistance = 100;
+        private int canDelatchCounter = 0;
+        private const int TIME_UNTIL_CAN_DELATCH = 3;
+        private float? latchOffsetX = null;
+        private float? latchOffsetY = null;
+        private BodyChunk latchedChunk = null;
         
-        public ConditionalWeakTable<Creature, CustomAirBreatherCreatureData> creatureBeingDrainedTable = new ();
+        public ConditionalWeakTable<Creature, CustomLeechCatVariables> creatureBeingDrainedTable = new ();
         
         public void OnEnable()
         {
             On.Player.LungUpdate += LeechCatLungs;
-            On.Player.Grabability += LeechCatGrabability;
-            On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
-            On.Player.GrabUpdate += LeechCatGrabUpdate;
+            On.Player.Update += LeechCatLatch;
+            //On.Player.Grabability += LeechCatGrabability;
+            //On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
+            //On.Player.GrabUpdate += LeechCatGrabUpdate;
             On.Player.Grabbed += LeechCatEscapeGrab;
 
             On.AirBreatherCreature.Update += LeechCatAirBreatherUpdate;
             IL.AirBreatherCreature.Update += LeechCatAirBreatherILUpdate;
+
+            On.Leech.ConsiderOtherCreature += LeechIgnoreLeechcat;
+
+            // On.GraphicsModule.InitiateSprites += InitiateChunkDebugSprites;
+            // On.GraphicsModule.DrawSprites += DrawChunkDebugSprites;
+            // On.GraphicsModule.AddToContainer += AddChunkDebugSpritesToContainer;
+        }
+
+        private void ViewChunksAndLatchRange()
+        {
             
-            //On.Leech.Attached += LeechLetGoOfLeechCat;
+        }
+
+        private void LeechCatLatch(On.Player.orig_Update orig, Player self, bool eu)
+        {
+            orig(self, eu);
+            
+            if (self.slugcatStats.name.value == MOD_ID && !currentlyLatched && self.input[0].pckp && self.input[0].jmp)
+            {
+                UnityEngine.Debug.Log("Leechcat: Detected attempt to latch!");
+                Logger.LogInfo("Detected attempt to latch!");
+                Vector2 leechcatPos = self.bodyChunks[0].pos;
+                float slugcatChunkRad = self.bodyChunks[0].rad;
+                
+                foreach (AbstractCreature crit in self.room.abstractRoom.creatures)
+                {
+                    if (crit.realizedCreature != null)
+                    {
+                        foreach (BodyChunk chunk in crit.realizedCreature.bodyChunks)
+                        {
+                            if (chunk.owner == self)
+                            {
+                                //Logger.LogInfo("Found own chunk: " + chunk.owner);
+                                continue;
+                            }
+
+                            Logger.LogInfo("slugcat chunk rad: " + self.bodyChunks[0].rad);
+                            Logger.LogInfo("potential latch chunk rad: " + chunk.rad);
+                            
+                            float sizeScale = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
+                            Logger.LogInfo("size scale for chunk: " + sizeScale);
+                            Logger.LogInfo("max latch distance: " + maxLatchDistance);
+                            
+                            float effectiveLatchRange = maxLatchDistance * sizeScale;
+                            Logger.LogInfo("effective latch range: " + effectiveLatchRange);
+                            Logger.LogInfo("slugcat chunk positon: " + self.bodyChunks[0].pos);
+                            Logger.LogInfo("distance: " + (self.bodyChunks[0].pos - chunk.pos).magnitude);
+                            
+                            if ((leechcatPos - chunk.pos).magnitude <= effectiveLatchRange)
+                            {
+                                UnityEngine.Debug.Log("Leechcat: Found creature chunk in latching range! Chunk owner: " + chunk.owner);
+                                Logger.LogInfo("Found creature chunk in latching range! Chunk owner: " + chunk.owner);
+                                // latchOffsetX = chunk.pos.x - latchedPos.x;
+                                // latchOffsetY = chunk.pos.y - latchedPos.y;
+                                latchedChunk = chunk;
+                                canDelatchCounter = 0;
+                                currentlyLatched = true;
+                                self.graphicsModule.BringSpritesToFront();
+                                break;
+                            }
+
+                        }
+                    }
+                }
+
+                UnityEngine.Debug.Log("Leechcat: Couldn't find creature to latch onto!");
+                Logger.LogInfo("Couldn't find creature to latch onto!");
+            }
+
+            if (self.slugcatStats.name.value == MOD_ID && currentlyLatched && latchedChunk != null)
+            {
+                self.bodyChunks[0].collideWithObjects = false;
+                self.bodyChunks[1].collideWithObjects = false;
+                // Vector2 latchOffset = new Vector2(latchOffsetX.Value, latchOffsetY.Value);
+                // Vector2 latchPos = latchedChunk.pos + latchOffset;
+                self.bodyChunks[0].pos = latchedChunk.pos;
+                UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos.ToString());
+                Logger.LogInfo("Moved Leechcat to latch point!" + self.bodyChunks[0].pos);
+                
+                canDelatchCounter++;
+
+                if (self.input[0].jmp)
+                {
+                    if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
+                    {
+                        currentlyLatched = false;
+                        latchedChunk = null;
+                    }
+                    else
+                    {
+                        Debug.LogInfo("Leechcat: Can't delatch yet! Delatch counter is at " + canDelatchCounter);
+                        Logger.LogInfo("Can't delatch yet! Delatch counter is at " + canDelatchCounter);
+                    }
+                }
+            }
+        }
+
+        private void LeechIgnoreLeechcat(On.Leech.orig_ConsiderOtherCreature orig, Leech self, Creature crit)
+        {
+            if (crit != null && crit is Player && (crit as Player).slugcatStats.name.value == MOD_ID)
+            {
+                return;
+            }
+
+            orig(self, crit);
         }
 
         private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
@@ -93,7 +252,7 @@ namespace SlugTemplate
                                            && !(self.grasps[0].grabbed as Creature).dead)
                 {
                     Creature grabbedCreature = self.grasps[0].grabbed as Creature;
-                    CustomAirBreatherCreatureData customAirData = null;
+                    CustomLeechCatVariables customAirData = null;
 
                     if (grabbedCreature is AirBreatherCreature)
                     {
@@ -227,7 +386,7 @@ namespace SlugTemplate
                     c.MoveAfterLabels();
                     c.MarkLabel(drowningLogic);
                     
-                    Logger.LogInfo(il.ToString());
+                    //Logger.LogInfo(il.ToString());
             }
             catch (Exception e)
             {
@@ -237,36 +396,46 @@ namespace SlugTemplate
             }
         }
 
-        private static void StealAir(AirBreatherCreature target)
+        private void StealAir(AirBreatherCreature target)
         {
             if (target == null || target.dead)
             {
                 return /*0f*/;
             }
 
-            //future improvements:
-            //creatures on land can refill their lungs, but it becomes less effective
-                // the longer they are drained as they get weaker
-            //leechcat gets an ability that can stun creatures for a moment while latched on
-                // most useful for dragging prey underwater
-                // costs a quarter food pip?
-            //lungs drain slightly faster underwater when leechcat is draining
-            //most creatures (read: not scavengers) can't attack leechcat while latched on
-            //bigger creatures can drag leechcat around while attached if not stunned
-            
-            if (target.lungs > 0.3)
+            if (creatureBeingDrainedTable.GetOrCreateValue(target).beingDrained)
             {
-                if (UnityEngine.Random.value >= 0.0166666675)
-                {
-                    target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
-                }
-                
                 if (target.Submersion < 1.0f)
                 {
-                    const float LUNGS_FILL_RATE = 0.033333335f;
-                    target.lungs -= LUNGS_FILL_RATE;
+                    float baseDrain = 0.2f;
+                    float sizeMultiplier = target.TotalMass;
+                    const float VANILLA_REFILL = 0.033333335f;
+                
+                    float netDrain = baseDrain / target.Template.lungCapacity / (1f + sizeMultiplier) - VANILLA_REFILL;
+
+                    target.lungs -= netDrain;
+                    target.lungs = Mathf.Clamp(target.lungs, -0.49f, target.Template.lungCapacity);
                 }
             }
+            
+            // if (target.lungs > 0.3f)
+            // {
+            //     if (UnityEngine.Random.value >= 0.0166666675)
+            //     {
+            //         target.lungs = Mathf.Max(-1f, target.lungs - 1f / target.Template.lungCapacity);
+            //     }
+            //     
+            //     if (target.Submersion < 1.0f)
+            //     {
+            //         const float LUNGS_FILL_RATE = 0.033333335f;
+            //         target.lungs -= LUNGS_FILL_RATE;
+            //     }
+            // }
+            //
+            // if (target.lungs < -0.49f && target.Submersion < 1.0f)
+            // {
+            //     target.lungs = -0.49f;
+            // }
         }
         
         // private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
