@@ -56,6 +56,9 @@ namespace SlugTemplate
         //  100%-125%: 1/4 pip
         //  125%-150%: 1/2 pip
         //  175%-200%(max): 1 pip
+    //AI adjustments:
+        //creatures that have leechcat's poison will flee any threats,
+        //  then try to stay still to heal it off
     
     [BepInPlugin(MOD_ID, "Leechcat", "0.1.0")]
     class leechcat : BaseUnityPlugin
@@ -65,7 +68,6 @@ namespace SlugTemplate
         private int _drainKeyHeldCounter = 0;
         private const int DRAIN_KEY_HELD_THRESHOLD = 20;
         private bool isDrainingCreature = false;
-        private bool currentlyLatched = false;
         private float maxLatchDistance = 100;
         private int canDelatchCounter = 0;
         private const int TIME_UNTIL_CAN_DELATCH = 3;
@@ -128,12 +130,16 @@ namespace SlugTemplate
         {
             orig(self, eu);
             
-            if (self.slugcatStats.name.value == MOD_ID && !currentlyLatched && self.input[0].pckp && self.input[0].jmp)
+            if (self.slugcatStats.name.value == MOD_ID 
+                && self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
+                && self.input[0].pckp && self.input[0].jmp)
             {
                 UnityEngine.Debug.Log("Leechcat: Detected attempt to latch!");
                 Logger.LogInfo("Detected attempt to latch!");
                 Vector2 leechcatPos = self.bodyChunks[0].pos;
                 float slugcatChunkRad = self.bodyChunks[0].rad;
+                BodyChunk closestChunk = null;
+                float closestDistance = 999999999999f;
                 
                 foreach (AbstractCreature crit in self.room.abstractRoom.creatures)
                 {
@@ -157,36 +163,61 @@ namespace SlugTemplate
                             float effectiveLatchRange = maxLatchDistance * sizeFactor;
                             Logger.LogInfo("effective latch range: " + effectiveLatchRange);
                             Logger.LogInfo("slugcat chunk positon: " + self.bodyChunks[0].pos);
-                            Logger.LogInfo("distance: " + (self.bodyChunks[0].pos - chunk.pos).magnitude);
+                            float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
+                            Logger.LogInfo("distance: " + distance);
                             
-                            if ((leechcatPos - chunk.pos).magnitude <= effectiveLatchRange)
+                            
+                            if (distance < closestDistance && distance <= effectiveLatchRange)
                             {
-                                UnityEngine.Debug.Log("Leechcat: Found creature chunk in latching range! Chunk owner: " + chunk.owner);
-                                Logger.LogInfo("Found creature chunk in latching range! Chunk owner: " + chunk.owner);
-                                // latchOffsetX = chunk.pos.x - latchedPos.x;
-                                // latchOffsetY = chunk.pos.y - latchedPos.y;
-                                latchedChunk = chunk;
-                                canDelatchCounter = 0;
-                                currentlyLatched = true;
-                                self.graphicsModule.BringSpritesToFront();
-                                break;
+                                closestDistance = distance;
+                                closestChunk = chunk;
                             }
-
                         }
                     }
                 }
-
-                UnityEngine.Debug.Log("Leechcat: Couldn't find creature to latch onto!");
-                Logger.LogInfo("Couldn't find creature to latch onto!");
+                
+                if (closestChunk != null)
+                {
+                    UnityEngine.Debug.Log("Leechcat: Found creature chunk in latching range! Chunk owner: " + closestChunk.owner);
+                    Logger.LogInfo("Found creature chunk in latching range! Chunk owner: " + closestChunk.owner);
+                    latchedChunk = closestChunk;
+                    canDelatchCounter = 0;
+                    self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
+                    self.graphicsModule.BringSpritesToFront();
+                }
+                if (self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched)
+                {
+                    UnityEngine.Debug.Log("Leechcat: Couldn't find creature to latch onto!");
+                    Logger.LogInfo("Couldn't find creature to latch onto!");   
+                }
             }
 
-            if (self.slugcatStats.name.value == MOD_ID && currentlyLatched && latchedChunk != null)
+            if (self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
+                && latchedChunk != null)
             {
                 self.bodyChunks[0].collideWithObjects = false;
                 self.bodyChunks[1].collideWithObjects = false;
-                // Vector2 latchOffset = new Vector2(latchOffsetX.Value, latchOffsetY.Value);
-                // Vector2 latchPos = latchedChunk.pos + latchOffset;
                 self.bodyChunks[0].pos = latchedChunk.pos;
+                self.bodyChunks[0].lastPos = latchedChunk.pos;
+                
+                float stiffness = 0.3f; // how strongly chunk 0 is pulled toward the latched chunk
+                float damping = 0.1f;   // reduces oscillation
+                float momentumBlend = 0.8f; // how much slugcat's existing velocity influences the result
+
+                // Calculate spring force toward latched chunk
+                Vector2 delta = latchedChunk.pos - self.bodyChunks[0].pos;
+                Vector2 springVel = delta * stiffness;
+
+                // Combine with slugcat's existing velocity
+                Vector2 combinedVel = springVel + self.bodyChunks[0].vel * momentumBlend;
+
+                // Apply damping
+                combinedVel *= (1 - damping);
+
+                // Update velocity and position
+                self.bodyChunks[0].vel = combinedVel;
+                self.bodyChunks[0].pos += self.bodyChunks[0].vel * Time.deltaTime;
+                
                 UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos.ToString());
                 Logger.LogInfo("Moved Leechcat to latch point!" + self.bodyChunks[0].pos);
                 
@@ -196,8 +227,10 @@ namespace SlugTemplate
                 {
                     if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
                     {
-                        currentlyLatched = false;
+                        self.bodyMode = Player.BodyModeIndex.Default;
                         latchedChunk = null;
+                        self.bodyChunks[0].collideWithObjects = true;
+                        self.bodyChunks[1].collideWithObjects = true;
                     }
                     else
                     {
