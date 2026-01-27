@@ -71,7 +71,7 @@ namespace SlugTemplate
         private bool isDrainingCreature = false;
         private float maxLatchDistance = 100;
         private int canDelatchCounter = 0;
-        private const int TIME_UNTIL_CAN_DELATCH = 3;
+        private const int TIME_UNTIL_CAN_DELATCH = 20;
         // private float? latchOffsetX = null;
         // private float? latchOffsetY = null;
         private BodyChunk latchedChunk = null;
@@ -123,8 +123,6 @@ namespace SlugTemplate
 
         private void LeechCatLatch(On.Player.orig_Update orig, Player self, bool eu)
         {
-            orig(self, eu);
-            
             if (self.slugcatStats.name.value == MOD_ID 
                 && self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
                 && self.input[0].pckp && self.input[0].jmp)
@@ -183,32 +181,14 @@ namespace SlugTemplate
                 self.bodyChunks[0].collideWithObjects = false;
                 self.bodyChunks[1].collideWithObjects = false;
                 self.bodyChunks[0].pos = latchedChunk.pos;
-                self.bodyChunks[0].lastPos = latchedChunk.pos;
+                self.bodyChunks[0].lastPos = latchedChunk.lastPos;
                 
-                float stiffness = 0.3f; // how strongly chunk 0 is pulled toward the latched chunk
-                float damping = 0.1f;   // reduces oscillation
-                float momentumBlend = 0.8f; // how much slugcat's existing velocity influences the result
-
-                // Calculate spring force toward latched chunk
-                Vector2 delta = latchedChunk.pos - self.bodyChunks[0].pos;
-                Vector2 springVel = delta * stiffness;
-
-                // Combine with slugcat's existing velocity
-                Vector2 combinedVel = springVel + self.bodyChunks[0].vel * momentumBlend;
-
-                // Apply damping
-                combinedVel *= (1 - damping);
-
-                // Update velocity and position
-                self.bodyChunks[0].vel = combinedVel;
-                self.bodyChunks[0].pos += self.bodyChunks[0].vel * Time.deltaTime;
-                
-                UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos.ToString());
+                UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos);
                 Logger.LogInfo("Moved leechcat to latch point!" + self.bodyChunks[0].pos);
                 
                 canDelatchCounter++;
 
-                if (self.input[0].jmp || self.dangerGrasp != null)
+                if (self.input[0].jmp && !self.input[1].jmp || self.dangerGrasp != null)
                 {
                     if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
                     {
@@ -219,10 +199,19 @@ namespace SlugTemplate
                     }
                     else
                     {
-                        Debug.LogInfo("Leechcat: Can't delatch yet! Delatch counter is at " + canDelatchCounter);
+                        UnityEngine.Debug.Log("Leechcat: Can't delatch yet! Delatch counter is at " + canDelatchCounter);
                         Logger.LogInfo("Can't delatch yet! Delatch counter is at " + canDelatchCounter);
                     }
                 }
+            }
+
+            bool isLatched = self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
+
+            orig(self, eu);
+
+            if (isLatched)
+            {
+                self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
             }
         }
         
