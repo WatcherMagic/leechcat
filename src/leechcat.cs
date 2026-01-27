@@ -3,6 +3,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using BepInEx;
+using JetBrains.Annotations;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using UnityEngine;
@@ -74,11 +75,15 @@ namespace SlugTemplate
         // private float? latchOffsetX = null;
         // private float? latchOffsetY = null;
         private BodyChunk latchedChunk = null;
+        private float? effectiveLatchRange = null;
+        private static leechcat _pluginInstance;
+        public static BepInEx.Logging.ManualLogSource LeechcatLogger => _pluginInstance.Logger;
         
-        public ConditionalWeakTable<Creature, CustomLeechCatVariables> creatureBeingDrainedTable = new ();
+        public ConditionalWeakTable<Creature, CustomLeechCatVariables> CreatureBeingDrainedTable = new ();
         
         public void OnEnable()
         {
+            _pluginInstance = this;
             LeechcatEnums.PlayerBodyModeIndex.RegisterValues();
             
             On.Player.LungUpdate += LeechCatLungs;
@@ -97,12 +102,6 @@ namespace SlugTemplate
             // On.GraphicsModule.InitiateSprites += InitiateChunkDebugSprites;
             // On.GraphicsModule.DrawSprites += DrawChunkDebugSprites;
             // On.GraphicsModule.AddToContainer += AddChunkDebugSpritesToContainer;
-            
-            Logger.LogInfo("All player BodyModeIndex enums:");
-            foreach (string index in Player.BodyModeIndex.values.entries)
-            {
-                Logger.LogInfo(index);
-            }
         }
 
         private void OnDisable()
@@ -110,19 +109,15 @@ namespace SlugTemplate
             LeechcatEnums.PlayerBodyModeIndex.UnregisterValues();
         }
 
-        private void LeechCatLatchIL(ILContext il)
+        private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
         {
-            try
+            if (self.slugcatStats.name.value == MOD_ID && self.submerged)
             {
-                ILCursor c = new ILCursor(il);
-                
-                
+                self.airInLungs = 1f;
             }
-            catch (Exception e)
+            else
             {
-                Debug.LogException(e);
-                Logger.LogError("Exception encountered in IL hook to Player.Update: " 
-                                + e.GetType() + ": " + e.Message + "\n" + e.StackTrace);
+                orig(self);
             }
         }
 
@@ -152,20 +147,10 @@ namespace SlugTemplate
                                 //Logger.LogInfo("Found own chunk: " + chunk.owner);
                                 continue;
                             }
-
-                            Logger.LogInfo("slugcat chunk rad: " + self.bodyChunks[0].rad);
-                            Logger.LogInfo("potential latch chunk rad: " + chunk.rad);
                             
                             float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
-                            Logger.LogInfo("size factor for chunk: " + sizeFactor);
-                            Logger.LogInfo("max latch distance: " + maxLatchDistance);
-                            
                             float effectiveLatchRange = maxLatchDistance * sizeFactor;
-                            Logger.LogInfo("effective latch range: " + effectiveLatchRange);
-                            Logger.LogInfo("slugcat chunk positon: " + self.bodyChunks[0].pos);
                             float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
-                            Logger.LogInfo("distance: " + distance);
-                            
                             
                             if (distance < closestDistance && distance <= effectiveLatchRange)
                             {
@@ -219,11 +204,11 @@ namespace SlugTemplate
                 self.bodyChunks[0].pos += self.bodyChunks[0].vel * Time.deltaTime;
                 
                 UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos.ToString());
-                Logger.LogInfo("Moved Leechcat to latch point!" + self.bodyChunks[0].pos);
+                Logger.LogInfo("Moved leechcat to latch point!" + self.bodyChunks[0].pos);
                 
                 canDelatchCounter++;
 
-                if (self.input[0].jmp)
+                if (self.input[0].jmp || self.dangerGrasp != null)
                 {
                     if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
                     {
@@ -240,29 +225,65 @@ namespace SlugTemplate
                 }
             }
         }
-
-        private void LeechIgnoreLeechcat(On.Leech.orig_ConsiderOtherCreature orig, Leech self, Creature crit)
+        
+        private void LeechCatLatchIL(ILContext il)
         {
-            if (crit != null && crit is Player && (crit as Player).slugcatStats.name.value == MOD_ID)
+            ILCursor c = new ILCursor(il);
+            
+            try
             {
-                return;
+                //set lastGroundY if leechcat latches onto something
+                ILLabel label = null;
+                c.GotoNext(MoveType.After,
+                    x => x.MatchLdarg(0),
+                    x => x.MatchLdfld(typeof(Player), nameof(Player.bodyMode)),
+                    x => x.MatchLdsfld(typeof(Player.BodyModeIndex), nameof(Player.BodyModeIndex.Swimming)),
+                    x => x.MatchCallOrCallvirt(out _),
+                    x => x.MatchBrtrue(out _),
+                    
+                    x => x.MatchLdarg(0),
+                    x => x.MatchLdfld(typeof(Player), nameof(Player.bodyMode)),
+                    x => x.MatchLdsfld(typeof(Player.BodyModeIndex), nameof(Player.BodyModeIndex.ClimbingOnBeam)),
+                    x => x.MatchCallOrCallvirt(out _),
+                    x => x.MatchBrtrue(out _),
+                    
+                    x => x.MatchLdarg(0),
+                    x => x.MatchLdfld(typeof(Player), nameof(Player.bodyMode)),
+                    x => x.MatchLdsfld(typeof(Player.BodyModeIndex), nameof(Player.BodyModeIndex.ZeroG)),
+                    x => x.MatchCallOrCallvirt(out _),
+                    x => x.MatchBrtrue(out label));
+                c.MoveAfterLabels();
+                c.Emit(OpCodes.Ldarg_0);
+                c.EmitDelegate<Func<Player, bool>>(player => player.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched);
+                c.Emit(OpCodes.Brtrue, label);
             }
-
-            orig(self, crit);
+            catch (Exception e)
+            {
+                Logger.LogError("Encountered error while trying to emit IL to set lastGroundY on latch: " + e.Message);
+            }
+            
+            try
+            {
+                //bypass clamp to ground while latched
+                ILLabel label = null;
+                c.GotoNext(MoveType.After,
+                    x => x.MatchLdarg(0),
+                    x => x.MatchLdfld(typeof(Player), nameof(Player.bodyMode)),
+                    x => x.MatchLdsfld(typeof(Player.BodyModeIndex), nameof(Player.BodyModeIndex.Swimming)),
+                    x => x.MatchCallOrCallvirt(out _),
+                    x => x.MatchBrfalse(out label));
+                c.MoveAfterLabels();
+                c.Emit(OpCodes.Ldarg_0);
+                c.EmitDelegate<Func<Player, bool>>(player =>
+                    player.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched);
+                c.Emit(OpCodes.Brfalse, label);
+            }
+            catch (Exception e)
+            {
+                Logger.LogError("Encountered error while trying to emit IL to bypass ground clamp while latched: " + e.Message);
+            }
         }
-
-        private void LeechCatLungs(On.Player.orig_LungUpdate orig, Player self)
-        {
-            if (self.slugcatStats.name.value == MOD_ID && self.submerged)
-            {
-                self.airInLungs = 1f;
-            }
-            else
-            {
-                orig(self);
-            }
-        }
-
+        
         private Player.ObjectGrabability LeechCatGrabability(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
         {   
             if (self.SlugCatClass.value == MOD_ID)
@@ -314,7 +335,7 @@ namespace SlugTemplate
 
                     if (grabbedCreature is AirBreatherCreature)
                     {
-                        customAirData = creatureBeingDrainedTable.GetOrCreateValue(grabbedCreature);
+                        customAirData = CreatureBeingDrainedTable.GetOrCreateValue(grabbedCreature);
                     }
                     
                     if (self.input[0].pckp)
@@ -424,7 +445,7 @@ namespace SlugTemplate
                     c.MoveAfterLabels();
                     ILLabel passBeingDrainedCheck = c.DefineLabel();
                     c.Emit(OpCodes.Ldarg_0);
-                    c.EmitDelegate<Func<AirBreatherCreature, bool>>(target => creatureBeingDrainedTable.GetOrCreateValue(target).beingDrained);
+                    c.EmitDelegate<Func<AirBreatherCreature, bool>>(target => CreatureBeingDrainedTable.GetOrCreateValue(target).beingDrained);
                     c.Emit(OpCodes.Brfalse_S, passBeingDrainedCheck);
                     c.Emit(OpCodes.Ldarg_0);
                     c.EmitDelegate(StealAir);
@@ -461,7 +482,7 @@ namespace SlugTemplate
                 return /*0f*/;
             }
 
-            if (creatureBeingDrainedTable.GetOrCreateValue(target).beingDrained)
+            if (CreatureBeingDrainedTable.GetOrCreateValue(target).beingDrained)
             {
                 if (target.Submersion < 1.0f)
                 {
@@ -494,6 +515,16 @@ namespace SlugTemplate
             // {
             //     target.lungs = -0.49f;
             // }
+        }
+        
+        private void LeechIgnoreLeechcat(On.Leech.orig_ConsiderOtherCreature orig, Leech self, Creature crit)
+        {
+            if (crit != null && crit is Player && (crit as Player).slugcatStats.name.value == MOD_ID)
+            {
+                return;
+            }
+
+            orig(self, crit);
         }
         
         // private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)

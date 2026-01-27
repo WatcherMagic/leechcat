@@ -21,6 +21,6 @@ public class BodyChunkVisualDebug : UpdatableAndDeletable, IDrawable
 
     public void InitiateSprites(RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam)
     {
-        //
+        
     }
 }
