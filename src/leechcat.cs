@@ -192,36 +192,39 @@ namespace SlugTemplate
                     Logger.LogInfo("Velocity multiplier: " + velocityMult);
                     loggedLatch = true;
                 }
-                foreach (BodyChunk chunk in latchedChunk.owner.bodyChunks)
+                if (velocityMult < 1f)
                 {
-                    float multiplierWeight = 1f - velocityMult;
-                    int closenessToLatched = latchedChunk.index - chunk.index;
-                    closenessToLatched = closenessToLatched < 0 ? closenessToLatched * -1 : closenessToLatched;
-                    if (closenessToLatched < 0)
+                    foreach (BodyChunk chunk in latchedChunk.owner.bodyChunks)
                     {
-                        Logger.LogError("Below 0 value in latched chunk velocity calculations!");
-                        UnityEngine.Debug.Log("Leechcat ERROR: Below 0 value in latched chunk velocity calculations!");
-                        break;
-                    }
-                    switch (closenessToLatched)
-                    {
-                        case 0:
-                            chunk.vel *= velocityMult;
+                        float multiplierWeight = 1f - velocityMult;
+                        int closenessToLatched = latchedChunk.index - chunk.index;
+                        closenessToLatched = closenessToLatched < 0 ? closenessToLatched * -1 : closenessToLatched;
+                        if (closenessToLatched < 0)
+                        {
+                            Logger.LogError("Below 0 value in latched chunk velocity calculations!");
+                            UnityEngine.Debug.Log("Leechcat ERROR: Below 0 value in latched chunk velocity calculations!");
                             break;
-                        case 1:
-                            chunk.vel *= multiplierWeight * 0.2f;
-                            break;
-                        case 2:
-                            chunk.vel *= multiplierWeight * 0.4f;
-                            break;
-                        case 3:
-                            chunk.vel *= multiplierWeight * 0.6f;
-                            break;
-                        case 4:
-                            chunk.vel *= multiplierWeight * 0.8f;
-                            break;
-                        default:
-                            break;
+                        }
+                        switch (closenessToLatched)
+                        {
+                            case 0:
+                                chunk.vel *= velocityMult;
+                                break;
+                            case 1:
+                                chunk.vel *= multiplierWeight * 0.2f;
+                                break;
+                            case 2:
+                                chunk.vel *= multiplierWeight * 0.4f;
+                                break;
+                            case 3:
+                                chunk.vel *= multiplierWeight * 0.6f;
+                                break;
+                            case 4:
+                                chunk.vel *= multiplierWeight * 0.8f;
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 }
                 
