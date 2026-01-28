@@ -181,7 +181,7 @@ namespace SlugTemplate
             {
                 SetLatchedState(self);
 
-                //velocity approach (WIP)
+                //velocity approach
                 float massRatio = latchedChunk.owner.TotalMass / self.TotalMass;
                 float velocityMult = Mathf.Clamp(Mathf.Log((-massRatio + 2.16f) + 0.2f, 0.1f), 0f, 1f);
                 if (!loggedLatch)
@@ -199,7 +199,8 @@ namespace SlugTemplate
                     closenessToLatched = closenessToLatched < 0 ? closenessToLatched * -1 : closenessToLatched;
                     if (closenessToLatched < 0)
                     {
-                        Logger.LogError("Below 0 value in chunk velocity calculations!");
+                        Logger.LogError("Below 0 value in latched chunk velocity calculations!");
+                        UnityEngine.Debug.Log("Leechcat ERROR: Below 0 value in latched chunk velocity calculations!");
                         break;
                     }
                     switch (closenessToLatched)
@@ -224,11 +225,15 @@ namespace SlugTemplate
                     }
                 }
                 
-                //mass approach (WIP)
-
-                latchedChunk.vel.y -= self.gravity;
+                Room.Tile tileUnderChunk = self.room.GetTile(latchedChunk.pos - new Vector2(0, -1));
+                if (tileUnderChunk != null && !tileUnderChunk.IsSolid())
+                {
+                    latchedChunk.vel.y -= self.gravity;
+                }
                 self.bodyChunks[0].pos = latchedChunk.pos;
                 self.bodyChunks[0].vel = latchedChunk.vel;
+                
+                //mass approach (WIP)
                 
                 canDelatchCounter++;
 
