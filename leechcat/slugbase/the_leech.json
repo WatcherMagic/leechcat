@@ -5,7 +5,7 @@
 	"features": {
 		"color": "e10000",
 		
-		"weight": 1.5,
+		"weight": 1,
 		"food_min": 7,
 		"food_max": 10,
 		"diet": {
