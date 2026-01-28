@@ -181,7 +181,7 @@ namespace SlugTemplate
             {
                 SetLatchedState(self);
 
-                //velocity approach
+                //velocity approach//
                 float massRatio = latchedChunk.owner.TotalMass / self.TotalMass;
                 float velocityMult = Mathf.Clamp(Mathf.Log((-massRatio + 2.16f) + 0.2f, 0.1f), 0f, 1f);
                 if (!loggedLatch)
