@@ -89,7 +89,7 @@ namespace SlugTemplate
             On.Player.LungUpdate += LeechCatLungs;
             On.Player.Update += LeechCatLatch;
             IL.Player.Update += LeechCatLatchIL;
-            //On.Player.Grabability += LeechCatGrabability;
+            On.Player.Grabability += LeechCatGrabability;
             //On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
             //On.Player.GrabUpdate += LeechCatGrabUpdate;
             On.Player.Grabbed += LeechCatEscapeGrab;
@@ -121,6 +121,7 @@ namespace SlugTemplate
             }
         }
 
+        private bool loggedLatch = false;
         private void LeechCatLatch(On.Player.orig_Update orig, Player self, bool eu)
         {
             if (self.slugcatStats.name.value == MOD_ID 
@@ -178,13 +179,27 @@ namespace SlugTemplate
             if (self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
                 && latchedChunk != null)
             {
-                self.bodyChunks[0].collideWithObjects = false;
-                self.bodyChunks[1].collideWithObjects = false;
-                self.bodyChunks[0].pos = latchedChunk.pos;
-                self.bodyChunks[0].lastPos = latchedChunk.lastPos;
+                SetLatchedState(self);
+
+                //velocity approach (WIP)
+                float massRatio = latchedChunk.owner.TotalMass / self.TotalMass;
+                float velocityMult = Mathf.Clamp(Mathf.Log((-massRatio + 2.16f) + 0.2f, 0.1f), 0f, 1f);
+                if (!loggedLatch)
+                {
+                    UnityEngine.Debug.Log("Leechcat: weight ratio: " + massRatio);
+                    UnityEngine.Debug.Log("Leechcat: velocity multiplier: " + velocityMult);
+                    Logger.LogInfo("Weight ratio: " + massRatio);
+                    Logger.LogInfo("Velocity multiplier: " + velocityMult);
+                    loggedLatch = true;
+                }
+
+                latchedChunk.vel *= velocityMult;
                 
-                UnityEngine.Debug.Log("Leechcat: Moved leechcat to latch point! " + self.bodyChunks[0].pos);
-                Logger.LogInfo("Moved leechcat to latch point!" + self.bodyChunks[0].pos);
+                //mass approach (WIP)
+
+                latchedChunk.vel.y -= self.gravity;
+                self.bodyChunks[0].pos = latchedChunk.pos;
+                self.bodyChunks[0].vel = latchedChunk.vel;
                 
                 canDelatchCounter++;
 
@@ -193,9 +208,7 @@ namespace SlugTemplate
                     if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
                     {
                         self.bodyMode = Player.BodyModeIndex.Default;
-                        latchedChunk = null;
-                        self.bodyChunks[0].collideWithObjects = true;
-                        self.bodyChunks[1].collideWithObjects = true;
+                        loggedLatch = false;
                     }
                     else
                     {
@@ -211,8 +224,45 @@ namespace SlugTemplate
 
             if (isLatched)
             {
-                self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
+                SetLatchedState(self);
             }
+            else if (latchedChunk != null && !CheckInsideCreatureChunk(self))
+            {
+                latchedChunk = null;
+                self.bodyChunks[0].collideWithObjects = true;
+                self.bodyChunks[1].collideWithObjects = true;
+            }
+        }
+
+        private void SetLatchedState(Player self)
+        {
+            self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
+            self.bodyChunks[0].collideWithObjects = false;
+            self.bodyChunks[1].collideWithObjects = false;
+        }
+
+        private bool CheckInsideCreatureChunk(Player self)
+        {
+            foreach (AbstractCreature crit in self.room.abstractRoom.creatures)
+            {
+                if (crit.realizedCreature != null)
+                {
+                    foreach (BodyChunk chunk in crit.realizedCreature.bodyChunks)
+                    {
+                        float combinedSizeChunk1 = chunk.rad + self.bodyChunks[0].rad;
+                        float combinedSizeChunk2 = chunk.rad + self.bodyChunks[1].rad;
+                        float chunk1Distance = (chunk.pos - self.bodyChunks[0].pos).magnitude;
+                        float chunk2Distance = (chunk.pos - self.bodyChunks[1].pos).magnitude;
+
+                        if (chunk1Distance < combinedSizeChunk1 || chunk2Distance < combinedSizeChunk2)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
         }
         
         private void LeechCatLatchIL(ILContext il)
@@ -274,31 +324,37 @@ namespace SlugTemplate
         }
         
         private Player.ObjectGrabability LeechCatGrabability(On.Player.orig_Grabability orig, Player self, PhysicalObject obj)
-        {   
-            if (self.SlugCatClass.value == MOD_ID)
+        {
+            if (self.slugcatStats.name.value == MOD_ID)
             {
-                if (obj is Creature && !(obj as Creature).Template.smallCreature)
-                {
-                    if (obj.GetType() == typeof(Player))
-                    {
-                        return orig(self, obj);
-                    }
-
-                    Player.ObjectGrabability checkForTwoHandCreature = orig(self, obj);
-                    if (checkForTwoHandCreature != Player.ObjectGrabability.TwoHands)
-                    {
-                        return Player.ObjectGrabability.Drag;
-                    }
-
-                    return checkForTwoHandCreature;
-                }
-                
-                return orig(self, obj);
-                
-                //add ability to grab leeches and eat them
+                return Player.ObjectGrabability.CantGrab;
             }
-            
             return orig(self, obj);
+            
+            // if (self.SlugCatClass.value == MOD_ID)
+            // {
+            //     if (obj is Creature && !(obj as Creature).Template.smallCreature)
+            //     {
+            //         if (obj.GetType() == typeof(Player))
+            //         {
+            //             return orig(self, obj);
+            //         }
+            //
+            //         Player.ObjectGrabability checkForTwoHandCreature = orig(self, obj);
+            //         if (checkForTwoHandCreature != Player.ObjectGrabability.TwoHands)
+            //         {
+            //             return Player.ObjectGrabability.Drag;
+            //         }
+            //
+            //         return checkForTwoHandCreature;
+            //     }
+            //     
+            //     return orig(self, obj);
+            //     
+            //     //add ability to grab leeches and eat them
+            // }
+            //
+            // return orig(self, obj);
         }
         
         private bool LeechCatCreatureHoldWithoutStun(On.Player.orig_IsCreatureLegalToHoldWithoutStun orig, Player self, Creature grabCheck)
