@@ -527,7 +527,7 @@ namespace SlugTemplate
                     // }
                 }
 
-                if (self.Submersion > 0.9)
+                if (self.Submersion < 0.2f)
                 {
                     self.lungs = Mathf.Max(self.lungs, -0.49f);
                 }
