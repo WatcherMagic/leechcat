@@ -449,60 +449,6 @@ namespace SlugTemplate
                             setInitialLatch = false;
                         }
                     }
-                    
-                    // Creature grabbedCreature = self.grasps[0].grabbed as Creature;
-                    // CustomLeechCatVariables customAirData = null;
-                    //
-                    // if (grabbedCreature is AirBreatherCreature)
-                    // {
-                    //     customAirData = CreatureBeingDrainedTable.GetOrCreateValue(grabbedCreature);
-                    // }
-                    //
-                    // if (self.input[0].pckp)
-                    // {
-                    //     //Logger.LogInfo("Player pressed pickup!");
-                    //     _drainKeyHeldCounter++;
-                    // }
-                    // else
-                    // {
-                    //     //Logger.LogInfo("Player is not pressing pickup!");
-                    //     _drainKeyHeldCounter = 0;
-                    //     
-                    //     if (customAirData != null && customAirData.beingDrained)
-                    //     {
-                    //         customAirData.beingDrained = false;
-                    //     }
-                    //     if (isDrainingCreature)
-                    //     {
-                    //         isDrainingCreature = false;
-                    //         Logger.LogInfo("Setting beingDrained to false!");
-                    //         UnityEngine.Debug.Log("Leechcat: Stopped draining " + grabbedCreature.Template.name + "!");
-                    //     }
-                    // }
-                    //
-                    // //creature is being drained & pickup was not released, continue to other logic
-                    // if (customAirData != null && customAirData.beingDrained)
-                    // {
-                    //     orig(self, eu);
-                    //     return;
-                    // }
-                    //
-                    // //creature is not being drained yet but conditions have been met to start
-                    // if (_drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
-                    // {
-                    //     isDrainingCreature = true;
-                    //     Logger.LogInfo("Started draining " + grabbedCreature.Template.name + "!");
-                    //     Debug.Log("Leechcat: Started draining " + grabbedCreature.Template.name + "!");
-                    //     if (grabbedCreature is AirBreatherCreature && customAirData != null)
-                    //     {
-                    //         Logger.LogInfo("Detected air breather creature! Setting beingDrained to true");
-                    //         customAirData.beingDrained = true;
-                    //     }
-                    //     else
-                    //     {
-                    //         DrainNonAirBreatherCreature(grabbedCreature);
-                    //     }
-                    // }
                 }
                 else
                 {
@@ -580,8 +526,11 @@ namespace SlugTemplate
                     //     self.Stun(Random.Range(0, 18));
                     // }
                 }
-                self.lungs = Mathf.Max(self.lungs, -0.49f);
-            
+
+                if (self.Submersion > 0.9)
+                {
+                    self.lungs = Mathf.Max(self.lungs, -0.49f);
+                }
             }
             else
             {
