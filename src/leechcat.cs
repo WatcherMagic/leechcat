@@ -75,6 +75,8 @@ namespace SlugTemplate
         // private float? latchOffsetY = null;
         private BodyChunk latchedChunk = null;
         private float? effectiveLatchRange = null;
+        private bool spritesInFrontWhileLatched = false;
+        
         private static leechcat _pluginInstance;
         public static BepInEx.Logging.ManualLogSource LeechcatLogger => _pluginInstance.Logger;
         
@@ -267,9 +269,16 @@ namespace SlugTemplate
 
         private void SetLatchedState(Player self)
         {
+            Logger.LogInfo("Setting leechcat state to latched");
+            UnityEngine.Debug.Log("Leechcat: Setting state to latched");
             self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
             self.bodyChunks[0].collideWithObjects = false;
             self.bodyChunks[1].collideWithObjects = false;
+
+            if (spritesInFrontWhileLatched)
+            {
+                self.graphicsModule.BringSpritesToFront();
+            }
         }
 
         private bool CheckInsideCreatureChunk(Player self)
@@ -422,8 +431,20 @@ namespace SlugTemplate
                 if (self.grasps[0] != null && self.grasps[0].grabbed != null 
                                            && self.grasps[0].grabbed is Creature)
                 {
-                    self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
-
+                    Creature latched = self.grasps[0].grabbed as Creature;
+                    if (self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched)
+                    {
+                        if (latched is Fly)
+                        {
+                            spritesInFrontWhileLatched = false;
+                        }
+                        else
+                        {
+                            spritesInFrontWhileLatched = true;
+                        }
+                        SetLatchedState(self);
+                    }
+                    
                     // Creature grabbedCreature = self.grasps[0].grabbed as Creature;
                     // CustomLeechCatVariables customAirData = null;
                     //
