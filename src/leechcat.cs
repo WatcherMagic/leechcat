@@ -27,6 +27,8 @@ namespace SlugTemplate
         // private float? latchOffsetY = null;
         private BodyChunk latchedChunk = null;
         private float? effectiveLatchRange = null;
+        private const float _DEFAULT_LATCH_STRENGTH = 1f;
+        private float _latchStrength = _DEFAULT_LATCH_STRENGTH;
         private bool spritesInFrontWhileLatched = false;
         private bool setInitialLatch = false;
         private float[] initialChunkMasses;
@@ -42,12 +44,13 @@ namespace SlugTemplate
             LeechcatEnums.PlayerBodyModeIndex.RegisterValues();
             
             On.Player.LungUpdate += LeechCatLungs;
-            On.Player.Update += LeechCatLatch;
+            On.Player.Update += LeechCatLatchUpdate;
             IL.Player.Update += LeechCatLatchIL;
             On.Player.Grabability += LeechCatGrabability;
             On.Player.IsCreatureLegalToHoldWithoutStun += LeechCatCreatureHoldWithoutStun;
             On.Player.IsCreatureImmuneToPlayerGrabStun += LeechCatDoesntStunCreatureOnGrab;
             On.Player.GrabUpdate += LeechCatGrabUpdate;
+            On.Creature.Grab += LeechCatLatch;
             On.Player.Grabbed += LeechCatEscapeGrab;
 
             On.AirBreatherCreature.Update += LeechCatAirBreatherUpdate;
@@ -72,66 +75,28 @@ namespace SlugTemplate
             }
         }
 
-        private bool loggedLatch = false;
-        private void LeechCatLatch(On.Player.orig_Update orig, Player self, bool eu)
+        private void LeechCatLatchUpdate(On.Player.orig_Update orig, Player self, bool eu)
         {
-            // if (self.slugcatStats.name.value == MOD_ID 
-            //     && self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
-            //     && self.input[0].pckp && self.input[0].jmp)
-            // {
-            //     UnityEngine.Debug.Log("Leechcat: Detected attempt to latch!");
-            //     Logger.LogInfo("Detected attempt to latch!");
-            //     Vector2 leechcatPos = self.bodyChunks[0].pos;
-            //     float slugcatChunkRad = self.bodyChunks[0].rad;
-            //     BodyChunk closestChunk = null;
-            //     float closestDistance = 999999999999f;
-            //     
-            //     foreach (AbstractCreature crit in self.room.abstractRoom.creatures)
-            //     {
-            //         if (crit.realizedCreature != null)
-            //         {
-            //             foreach (BodyChunk chunk in crit.realizedCreature.bodyChunks)
-            //             {
-            //                 if (chunk.owner == self)
-            //                 {
-            //                     //Logger.LogInfo("Found own chunk: " + chunk.owner);
-            //                     continue;
-            //                 }
-            //                 
-            //                 float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
-            //                 float effectiveLatchRange = maxLatchDistance * sizeFactor;
-            //                 float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
-            //                 
-            //                 if (distance < closestDistance && distance <= effectiveLatchRange)
-            //                 {
-            //                     closestDistance = distance;
-            //                     closestChunk = chunk;
-            //                 }
-            //             }
-            //         }
-            //     }
-            //     
-            //     if (closestChunk != null)
-            //     {
-            //         UnityEngine.Debug.Log("Leechcat: Found creature chunk in latching range! Chunk owner: " + closestChunk.owner);
-            //         Logger.LogInfo("Found creature chunk in latching range! Chunk owner: " + closestChunk.owner);
-            //         latchedChunk = closestChunk;
-            //         canDelatchCounter = 0;
-            //         self.bodyMode = LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
-            //         self.graphicsModule.BringSpritesToFront();
-            //     }
-            //     if (self.bodyMode != LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched)
-            //     {
-            //         UnityEngine.Debug.Log("Leechcat: Couldn't find creature to latch onto!");
-            //         Logger.LogInfo("Couldn't find creature to latch onto!");   
-            //     }
-            // }
-            
-            bool isLatched = self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
+            bool latched = setInitialLatch && latchedChunk != null;
+
+            if (latched)
+            {
+                SetLatchedState(self);
+
+                // Creature.Grasp grasp = self.grasps[0];
+                // if (grasp != null)
+                // {
+                //     grasp.dominance = _latchStrength;
+                // }
+            }
+            else
+            {
+                self.bodyMode = Player.BodyModeIndex.Default;
+            }
 
             orig(self, eu);
 
-            if (isLatched)
+            if (latched)
             {
                 SetLatchedState(self);
             }
@@ -277,90 +242,21 @@ namespace SlugTemplate
         {
             if (self.SlugCatClass.value == MOD_ID)
             {
-                if (self.grasps[0] != null && self.grasps[0].grabbed != null 
-                                           && self.grasps[0].grabbed is Creature)
+                if (self.grasps[0] != null && self.grasps[0].grabbed is Creature latched)
                 {
-                    Creature latched = self.grasps[0].grabbed as Creature;
-                    if (!setInitialLatch)
+                    if (setInitialLatch)
                     {
-                        Logger.LogInfo("Initial latch onto " + latched.Template.name);
-                        UnityEngine.Debug.Log("Leechcat: Initial latch onto " + latched.Template.name);
-                        if (latched is Fly)
+                        if (_latchStrength <= 0f)
                         {
-                            spritesInFrontWhileLatched = false;
+                            self.ReleaseGrasp(0);
+                            setInitialLatch = false;
+                            latchedChunk = null;
                         }
                         else
                         {
-                            spritesInFrontWhileLatched = true;
-                        }
-                        SetLatchedState(self);
-                        
-                        
-                        //find closest creature chunk
-                        Vector2 leechcatPos = self.bodyChunks[0].pos;
-                        float slugcatChunkRad = self.bodyChunks[0].rad;
-                        BodyChunk closestChunk = null;
-                        float closestDistance = 999999999999f;
-
-                        if (latched.abstractCreature.realizedCreature == null)
-                        {
-                            Logger.LogInfo("Latch failed on trying to grab null creature!");
-                            return;
-                        }
-                        foreach (BodyChunk chunk in latched.abstractCreature.realizedCreature.bodyChunks)
-                        {
-                            if (chunk.owner == self)
-                            {
-                                //Logger.LogInfo("Found own chunk: " + chunk.owner);
-                                continue;
-                            }
-                            
-                            float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
-                            effectiveLatchRange = maxLatchDistance * sizeFactor;
-                            float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
-                            
-                            if (distance < closestDistance && distance <= effectiveLatchRange)
-                            {
-                                closestDistance = distance;
-                                closestChunk = chunk;
-                            }
-                        }
-
-                        if (closestChunk == null)
-                        {
-                            Logger.LogInfo("Failed to find a chunk to latch onto!");
-                            return;
+                            self.grasps[0].dominance = _latchStrength;
                         }
                         
-                        // float weightRatio = latched.TotalMass / self.TotalMass;
-                        // float massMultiplier = Mathf.Pow(weightRatio * -0.5f, 2f) + 1.5f;
-                        // Logger.LogInfo("Weight ratio: " + weightRatio);
-                        // Logger.LogInfo("Mass multiplier: " + massMultiplier);
-                        // initialChunkMasses = new float[self.bodyChunks.Length];
-                        // for (int i = 0; i < initialChunkMasses.Length; i++)
-                        // {
-                        //     initialChunkMasses[i] = self.bodyChunks[i].mass;
-                        //     self.bodyChunks[i].mass *= massMultiplier;
-                        // }
-                        // Logger.LogInfo("New total mass: " + self.TotalMass);
-                        // UnityEngine.Debug.Log("Leechcat: weight ratio: " + weightRatio);
-                        // UnityEngine.Debug.Log("Leechcat: mass multiplier: " + massMultiplier);
-                        // UnityEngine.Debug.Log("Leechcat: new total mass: " + self.TotalMass);
-                        
-                        Logger.LogInfo("Grabbing " + latched.Template.name + " body chunk " + closestChunk.index);
-                        UnityEngine.Debug.Log("Leechcat: Grabbing " + latched.Template.name + " body chunk " + closestChunk.index);
-                        latchedChunk = closestChunk;
-                        bool succeeded = self.Grab(latched, 0, latchedChunk.index,
-                            Creature.Grasp.Shareability.CanOnlyShareWithNonExclusive, 0.5f, true, false);
-                        Logger.LogInfo("Grab success: " + succeeded);
-                        if (!succeeded)
-                        {
-                            return;
-                        }
-                        setInitialLatch = true;
-                    }
-                    else
-                    {
                         if (self.input[0].pckp) //drain creature
                         {
                             _drainKeyHeldCounter++;
@@ -408,7 +304,7 @@ namespace SlugTemplate
                 }
                 else
                 {
-                    self.bodyMode = Player.BodyModeIndex.Default;
+                    // self.bodyMode = Player.BodyModeIndex.Default;
                     // if (initialChunkMasses.Length == self.bodyChunks.Length)
                     // {
                     //     for (int i = 0; i < self.bodyChunks.Length; i++)
@@ -418,11 +314,136 @@ namespace SlugTemplate
                     //     Logger.LogInfo("Reset mass on delatch");
                     //     UnityEngine.Debug.Log("Leechcat: reset mass on delatch");
                     // }
+                    _latchStrength = _DEFAULT_LATCH_STRENGTH;
                     latchedChunk = null;
                     setInitialLatch = false;
                 }
             }
             orig(self, eu);
+        }
+        
+        private bool LeechCatLatch(On.Creature.orig_Grab orig, Creature self, PhysicalObject obj, int graspUsed, int chunkGrabbed, Creature.Grasp.Shareability shareability, float dominance, bool overrideEquallyDominant, bool pacifying)
+        {
+            if (self is Player leechcat && leechcat.SlugCatClass.value == MOD_ID && obj is Creature latched)
+            {
+                //copied from Creature.Grab
+                if (self.grasps == null || graspUsed < 0 || graspUsed > self.grasps.Length
+                    || latched.abstractPhysicalObject.rippleLayer != self.abstractCreature.rippleLayer
+                    && !latched.abstractPhysicalObject.rippleBothSides
+                    && !leechcat.abstractCreature.rippleBothSides
+                    || latched.slatedForDeletetion
+                    || !latched.CanBeGrabbed(self))
+                {
+                    return false;
+                }
+
+                //if trying to grab object already holding
+                if (leechcat.grasps[graspUsed] != null && leechcat.grasps[graspUsed].grabbed == obj)
+                {
+                    leechcat.ReleaseGrasp(graspUsed);
+                    leechcat.grasps[graspUsed] = new Creature.Grasp(self, obj, graspUsed, chunkGrabbed, shareability,
+                        _latchStrength, false);
+                    latched.Grabbed(leechcat.grasps[graspUsed]);
+                    AbstractPhysicalObject.CreatureGripStick creatureGripStick =
+                        new AbstractPhysicalObject.CreatureGripStick(self.abstractCreature, obj.abstractPhysicalObject,
+                            graspUsed, false || latched.TotalMass < leechcat.TotalMass);
+                    return true;
+                }
+
+                //release object already holding
+                if (leechcat.grasps[graspUsed] != null)
+                {
+                    leechcat.ReleaseGrasp(graspUsed);
+                }
+
+                if (!setInitialLatch)
+                {
+                    Logger.LogInfo("Initial latch onto " + latched.Template.name);
+                    UnityEngine.Debug.Log("Leechcat: Initial latch onto " + latched.Template.name);
+                    if (latched is Fly)
+                    {
+                        spritesInFrontWhileLatched = false;
+                    }
+                    else
+                    {
+                        spritesInFrontWhileLatched = true;
+                    }
+
+                    SetLatchedState(leechcat);
+
+                    //find closest creature chunk
+                    Vector2 leechcatPos = self.bodyChunks[0].pos;
+                    float slugcatChunkRad = self.bodyChunks[0].rad;
+                    BodyChunk closestChunk = null;
+                    float closestDistance = 999999999999f;
+
+                    if (latched.abstractCreature.realizedCreature == null)
+                    {
+                        Logger.LogInfo("Latch failed on trying to grab null creature!");
+                        return false;
+                    }
+
+                    foreach (BodyChunk chunk in latched.abstractCreature.realizedCreature.bodyChunks)
+                    {
+                        if (chunk.owner == leechcat)
+                        {
+                            //Logger.LogInfo("Found own chunk: " + chunk.owner);
+                            continue;
+                        }
+
+                        float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
+                        effectiveLatchRange = maxLatchDistance * sizeFactor;
+                        float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
+
+                        if (distance < closestDistance && distance <= effectiveLatchRange)
+                        {
+                            closestDistance = distance;
+                            closestChunk = chunk;
+                        }
+                    }
+
+                    if (closestChunk == null)
+                    {
+                        Logger.LogInfo("Failed to find a chunk to latch onto!");
+                        return false;
+                    }
+
+                    // float weightRatio = latched.TotalMass / self.TotalMass;
+                    // float massMultiplier = Mathf.Pow(weightRatio * -0.5f, 2f) + 1.5f;
+                    // Logger.LogInfo("Weight ratio: " + weightRatio);
+                    // Logger.LogInfo("Mass multiplier: " + massMultiplier);
+                    // initialChunkMasses = new float[self.bodyChunks.Length];
+                    // for (int i = 0; i < initialChunkMasses.Length; i++)
+                    // {
+                    //     initialChunkMasses[i] = self.bodyChunks[i].mass;
+                    //     self.bodyChunks[i].mass *= massMultiplier;
+                    // }
+                    // Logger.LogInfo("New total mass: " + self.TotalMass);
+                    // UnityEngine.Debug.Log("Leechcat: weight ratio: " + weightRatio);
+                    // UnityEngine.Debug.Log("Leechcat: mass multiplier: " + massMultiplier);
+                    // UnityEngine.Debug.Log("Leechcat: new total mass: " + self.TotalMass);
+
+                    Logger.LogInfo("Grabbing " + latched.Template.name + " body chunk " + closestChunk.index);
+                    UnityEngine.Debug.Log("Leechcat: Grabbing " + latched.Template.name + " body chunk " +
+                                          closestChunk.index);
+                    latchedChunk = closestChunk;
+
+                    leechcat.grasps[graspUsed] = new Creature.Grasp(self, latched, graspUsed, latchedChunk.index,
+                        Creature.Grasp.Shareability.NonExclusive, _latchStrength, false);
+                    latched.Grabbed(leechcat.grasps[graspUsed]);
+
+                    AbstractPhysicalObject.CreatureGripStick gripStick =
+                        new AbstractPhysicalObject.CreatureGripStick(leechcat.abstractCreature,
+                            latched.abstractPhysicalObject,
+                            graspUsed,
+                            false || latched.TotalMass < leechcat.TotalMass);
+
+                    setInitialLatch = true;
+                    return true;
+                }
+            }
+
+            return orig(self, obj, graspUsed, chunkGrabbed, shareability, dominance, overrideEquallyDominant, pacifying);
         }
 
         private void DrainNonAirBreatherCreature(Creature creatureToDrain)
