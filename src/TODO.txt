@@ -1,0 +1,58 @@
+KNOWN ISSUES:
+- //
+
+TODO:
+- Grab nearest chunk when "picking up" creature (including chunks without colliders?)
+
+Leechcat plans:
+Ability plans:
+- Custom poison bite, costs 1 food pip
+    - slows prey, causes weakness, and rarely stuns; can be stacked
+- Stun bite, costs 1/4 food pip
+    - stuns prey for ~1 second; timing it with activation of CreatureSpasmer/thrashing can double stun duration
+- Can't pick up objects; no arms
+    - alternatively, can hold one object in mouth (i.e, for swallowing/tolls)
+- Does not rise in water
+
+Controls:
+- Shift = latch onto creature/pick up thing in mouth
+- Shift (held while latched) = drain oxygen, also drains food pips on exhausted creatures
+- X (while latched) = delatch and jump to new point on creature; use to avoid being thrown off
+    - Sticky window/grace period when volunatrily delatched--auto target new latch point
+- Z = stun bite, increases exhaustion
+- Shift + z/c = poison bite, increases exhaustion
+- Arrow keys = move around on creature while latched
+    - Cannot bite or drain oxygen while moving
+        - Optional: up arrow near pole while latched = hold onto pole
+
+Fight mechanics:
+- Leechcat latches onto a creature above water, creature may or may not react
+- Being latched prevents leechcat's oxygen from depleting
+- Hold shift -> oxygen drain, creature panics and starts trying to attack/dislodge leechcat
+- Leechcat's "grip strength" depletes while the creature struggles
+- Press X -> jump to a different location on the body,
+    - With grip strength refilling rapidly depending on struggle strength
+- Z/C can be used at cost of food pips to stun or poison the creature
+    - Timing stun bite with the start of a thrash is "super effective" and doubles stun duration
+    - While oxygen is being depleted, creature's "exhaustion" is increasing
+    - Applied poison also increases exhaustion
+    - Exhaustion cannot decrease while the creature is stunned
+- Repeat cycle of oxygen drain + stun + poison until creature is exhausted
+- Leechcat receives drag assist on creatures in exhausted state, and can now drain food pips
+- Player options: drag exhausted creature to water for quick kill + advantage, or feed
+    - If feeding on land, exhaustion will gradually decrease;
+        - When it goes below 100%, player will lose access to food pips and creature will recover slightly
+        - Dragging creature will cause creature to start struggling, preventing exhaustion recovery
+- Underwater, exhaustion can be maxed out, the creature can drown, and leechcat can siphon food pips at maximum rate
+- Creature dies once leechcat has siphoned all its food pips
+
+Feeding mechanics:
+- Carcasses have a "decay timer" and are no longer edible after 1-2 minutes
+- This forces leechcat to rely on live prey, but allows eating from fresh kills and scavenging if lucky
+- Leechcat food pip drain scales depending on how exhausted the prey is:
+    - 100%-125%: 1/4 pip
+    - 125%-150%: 1/2 pip
+    - 175%-200%(max): 1 pip
+    
+AI Adjustments:
+- Creatures that have leechcat's poison will flee any threats, then try to stay still to heal it off
