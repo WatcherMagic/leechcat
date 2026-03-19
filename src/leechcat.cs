@@ -12,55 +12,6 @@ using Random = UnityEngine.Random;
 namespace SlugTemplate
 {
     
-    //leechcat ability plans:
-    //custom poison bite, costs 1 food pip
-        //slows prey, causes weakness, and rarely stuns; can be stacked
-    //stun bite, costs 1/4 food pip
-        //stuns prey for ~1 second; timing it with activation of CreatureSpasmer/thrashing can double stun duration
-    //can't pick up objects; no arms
-        //alternatively, can hold one object in mouth (i.e, for swallowing/tolls)
-    //controls:
-        //shift = latch onto creature/pick up thing in mouth
-        //shift (held while latched) = drain oxygen, also drains food pips on exhausted creatures
-        //x (while latched) = delatch and jump to new point on creature; use to avoid being thrown off
-        //  sticky window/grace period when volunatrily delatched--auto target new latch point
-        //z = stun bite, increases exhaustion
-        //shift + z/c = poison bite, increases exhaustion
-        //arrow keys = move around on creature while latched
-            //cannot bite or drain oxygen while moving
-        //optional: up arrow near pole while latched = hold onto pole
-    //fight mechanics:
-        //leechcat latches onto a creature above water, creature may or may not react
-        //being latched prevents leechcat's oxygen from depleting
-        //hold shift -> oxygen drain, creature panics and starts trying to attack/dislodge leechcat
-        //leechcat's "grip strength" depletes while the creature struggles
-        //press z -> jump to a different location on the body,
-        //  with grip strength refilling rapidly depending on struggle strength
-        //x/c can be used at cost of food pips to stun or poison the creature
-        //timing stun bite with the start of a thrash is "super effective" and doubles stun duration
-        //while oxygen is being depleted, creature's "exhaustion" is increasing
-        //applied poison also increases exhaustion
-        //exhaustion cannot decrease while the creature is stunned
-        //repeat cycle of oxygen drain + stun + poison until creature is exhausted
-        //leechcat receives drag assist on creatures in exhausted state, and can now drain food pips
-        //player options: drag exhausted creature to water for quick kill + advantage, or feed
-        //if feeding on land, exhaustion will gradually decrease;
-        //  when it goes below 100%, player will lose access to food pips and creature will recover slightly
-        //dragging creature will cause creature to start ineffectively struggling, preventing exhaustion recovery
-        //underwater, exhaustion can be maxed out, the creature can drown,
-        //  and leechcat can siphon food pips at maximum rate
-        //creature dies once leechcat has siphoned all its food pips
-    //feeding mechanics:
-        //carcasses have a "decay timer" and are no longer edible after 1-2 minutes
-        //this forces leechcat to rely on live prey, but allows eating from fresh kills and scavenging if lucky
-        //leechcat food pip drain scales depending on how exhausted the prey is:
-        //  100%-125%: 1/4 pip
-        //  125%-150%: 1/2 pip
-        //  175%-200%(max): 1 pip
-    //AI adjustments:
-        //creatures that have leechcat's poison will flee any threats,
-        //  then try to stay still to heal it off
-    
     [BepInPlugin(MOD_ID, "Leechcat", "0.1.0")]
     class leechcat : BaseUnityPlugin
     {
@@ -78,6 +29,7 @@ namespace SlugTemplate
         private float? effectiveLatchRange = null;
         private bool spritesInFrontWhileLatched = false;
         private bool setInitialLatch = false;
+        private float[] initialChunkMasses;
         
         private static leechcat _pluginInstance;
         public static BepInEx.Logging.ManualLogSource LeechcatLogger => _pluginInstance.Logger;
@@ -174,84 +126,7 @@ namespace SlugTemplate
             //         Logger.LogInfo("Couldn't find creature to latch onto!");   
             //     }
             // }
-
-            // if (self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched
-            //     && latchedChunk != null)
-            // {
-            //     SetLatchedState(self);
-            //
-            //     //velocity approach
-            //     float massRatio = latchedChunk.owner.TotalMass / self.TotalMass;
-            //     float velocityMult = Mathf.Clamp(Mathf.Log((-massRatio + 2.16f) + 0.2f, 0.1f), 0f, 1f);
-            //     if (!loggedLatch)
-            //     {
-            //         UnityEngine.Debug.Log("Leechcat: weight ratio: " + massRatio);
-            //         UnityEngine.Debug.Log("Leechcat: velocity multiplier: " + velocityMult);
-            //         Logger.LogInfo("Weight ratio: " + massRatio);
-            //         Logger.LogInfo("Velocity multiplier: " + velocityMult);
-            //         loggedLatch = true;
-            //     }
-            //     if (velocityMult < 1f)
-            //     {
-            //         foreach (BodyChunk chunk in latchedChunk.owner.bodyChunks)
-            //         {
-            //             float multiplierWeight = 1f - velocityMult;
-            //             int closenessToLatched = latchedChunk.index - chunk.index;
-            //             closenessToLatched = closenessToLatched < 0 ? closenessToLatched * -1 : closenessToLatched;
-            //             if (closenessToLatched < 0)
-            //             {
-            //                 Logger.LogError("Below 0 value in latched chunk velocity calculations!");
-            //                 UnityEngine.Debug.Log("Leechcat ERROR: Below 0 value in latched chunk velocity calculations!");
-            //                 break;
-            //             }
-            //             switch (closenessToLatched)
-            //             {
-            //                 case 0:
-            //                     chunk.vel *= velocityMult;
-            //                     break;
-            //                 case 1:
-            //                     chunk.vel *= multiplierWeight * 0.1f;
-            //                     break;
-            //                 case 2:
-            //                     chunk.vel *= multiplierWeight * 0.25f;
-            //                     break;
-            //                 case 3:
-            //                     chunk.vel *= multiplierWeight * 0.5f;
-            //                     break;
-            //                 case 4:
-            //                     chunk.vel *= multiplierWeight * 0.8f;
-            //                     break;
-            //                 default:
-            //                     break;
-            //             }
-            //         }
-            //     }
-            //     
-            //     //TODO: check if ground detection works
-            //     if (latchedChunk.contactPoint.y < 0)
-            //     {
-            //         latchedChunk.vel.y -= self.gravity;
-            //     }
-            //     self.bodyChunks[0].pos = latchedChunk.pos;
-            //     self.bodyChunks[0].vel = latchedChunk.vel;
-            //     
-            //     canDelatchCounter++;
-            //
-            //     if (self.input[0].jmp && !self.input[1].jmp || self.dangerGrasp != null)
-            //     {
-            //         if (canDelatchCounter >= TIME_UNTIL_CAN_DELATCH)
-            //         {
-            //             self.bodyMode = Player.BodyModeIndex.Default;
-            //             loggedLatch = false;
-            //         }
-            //         else
-            //         {
-            //             UnityEngine.Debug.Log("Leechcat: Can't delatch yet! Delatch counter is at " + canDelatchCounter);
-            //             Logger.LogInfo("Can't delatch yet! Delatch counter is at " + canDelatchCounter);
-            //         }
-            //     }
-            // }
-            //
+            
             bool isLatched = self.bodyMode == LeechcatEnums.PlayerBodyModeIndex.LeechcatLatched;
 
             orig(self, eu);
@@ -260,7 +135,7 @@ namespace SlugTemplate
             {
                 SetLatchedState(self);
             }
-            // else if (latchedChunk != null && !CheckInsideCreatureChunk(self))
+            // else if (latchedChunk != null && !CheckIsInsideCreatureChunk(self))
             // {
             //     latchedChunk = null;
             //     self.bodyChunks[0].collideWithObjects = true;
@@ -280,7 +155,7 @@ namespace SlugTemplate
             }
         }
 
-        private bool CheckInsideCreatureChunk(Player self)
+        private bool CheckIsInsideCreatureChunk(Player self)
         {
             foreach (AbstractCreature crit in self.room.abstractRoom.creatures)
             {
@@ -419,40 +294,132 @@ namespace SlugTemplate
                             spritesInFrontWhileLatched = true;
                         }
                         SetLatchedState(self);
+                        
+                        
+                        //find closest creature chunk
+                        Vector2 leechcatPos = self.bodyChunks[0].pos;
+                        float slugcatChunkRad = self.bodyChunks[0].rad;
+                        BodyChunk closestChunk = null;
+                        float closestDistance = 999999999999f;
+
+                        if (latched.abstractCreature.realizedCreature == null)
+                        {
+                            Logger.LogInfo("Latch failed on trying to grab null creature!");
+                            return;
+                        }
+                        foreach (BodyChunk chunk in latched.abstractCreature.realizedCreature.bodyChunks)
+                        {
+                            if (chunk.owner == self)
+                            {
+                                //Logger.LogInfo("Found own chunk: " + chunk.owner);
+                                continue;
+                            }
+                            
+                            float sizeFactor = Mathf.Clamp(chunk.rad / slugcatChunkRad, 0.8f, 1.5f);
+                            effectiveLatchRange = maxLatchDistance * sizeFactor;
+                            float distance = (self.bodyChunks[0].pos - chunk.pos).magnitude;
+                            
+                            if (distance < closestDistance && distance <= effectiveLatchRange)
+                            {
+                                closestDistance = distance;
+                                closestChunk = chunk;
+                            }
+                        }
+
+                        if (closestChunk == null)
+                        {
+                            Logger.LogInfo("Failed to find a chunk to latch onto!");
+                            return;
+                        }
+                        
+                        // float weightRatio = latched.TotalMass / self.TotalMass;
+                        // float massMultiplier = Mathf.Pow(weightRatio * -0.5f, 2f) + 1.5f;
+                        // Logger.LogInfo("Weight ratio: " + weightRatio);
+                        // Logger.LogInfo("Mass multiplier: " + massMultiplier);
+                        // initialChunkMasses = new float[self.bodyChunks.Length];
+                        // for (int i = 0; i < initialChunkMasses.Length; i++)
+                        // {
+                        //     initialChunkMasses[i] = self.bodyChunks[i].mass;
+                        //     self.bodyChunks[i].mass *= massMultiplier;
+                        // }
+                        // Logger.LogInfo("New total mass: " + self.TotalMass);
+                        // UnityEngine.Debug.Log("Leechcat: weight ratio: " + weightRatio);
+                        // UnityEngine.Debug.Log("Leechcat: mass multiplier: " + massMultiplier);
+                        // UnityEngine.Debug.Log("Leechcat: new total mass: " + self.TotalMass);
+                        
+                        Logger.LogInfo("Grabbing " + latched.Template.name + " body chunk " + closestChunk.index);
+                        UnityEngine.Debug.Log("Leechcat: Grabbing " + latched.Template.name + " body chunk " + closestChunk.index);
+                        latchedChunk = closestChunk;
+                        bool succeeded = self.Grab(latched, 0, latchedChunk.index,
+                            Creature.Grasp.Shareability.CanOnlyShareWithNonExclusive, 0.5f, true, false);
+                        Logger.LogInfo("Grab success: " + succeeded);
+                        if (!succeeded)
+                        {
+                            return;
+                        }
                         setInitialLatch = true;
                     }
                     else
                     {
                         if (self.input[0].pckp) //drain creature
                         {
-                            if (!CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained)
-                            {
-                                Logger.LogInfo("Draining " + latched.Template.name);
-                                UnityEngine.Debug.Log("Leechcat: Draining " + latched.Template.name);
-                                CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained = true;
-                            }
+                            _drainKeyHeldCounter++;
 
-                            if (latched is AirBreatherCreature)
+                            if (_drainKeyHeldCounter >= DRAIN_KEY_HELD_THRESHOLD)
                             {
-                                //StealAir(latched as AirBreatherCreature);
+                                if (!CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained)
+                                {
+                                    Logger.LogInfo("Draining " + latched.Template.name);
+                                    UnityEngine.Debug.Log("Leechcat: Draining " + latched.Template.name);
+                                    CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained = true;
+                                }
+
+                                if (latched is AirBreatherCreature)
+                                {
+                                    //StealAir(latched as AirBreatherCreature);
+                                }
+                                else
+                                {
+                                    DrainNonAirBreatherCreature(latched);
+                                }
                             }
-                            else
+                            else if (self.input[0].jmp && _drainKeyHeldCounter < DRAIN_KEY_HELD_THRESHOLD)
                             {
-                                DrainNonAirBreatherCreature(latched);
+                                //poison bite
+                            }
+                            
+                            if (!self.input[0].pckp)
+                            {
+                                _drainKeyHeldCounter = 0;
+
+                                if (CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained)
+                                {
+                                    Logger.LogInfo("Stopped draining " + latched.Template.name);
+                                    UnityEngine.Debug.Log("Leechcat: Stopped draining " + latched.Template.name);
+                                    CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained = false;
+                                }
                             }
                         }
-                        else if (!self.input[0].pckp && CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained)
+                        else if (self.input[0].jmp)
                         {
-                            Logger.LogInfo("Stopped draining " + latched.Template.name);
-                            UnityEngine.Debug.Log("Leechcat: Stopped draining " + latched.Template.name);
-                            CreatureBeingDrainedTable.GetOrCreateValue(latched).beingDrained = false;
-                            setInitialLatch = false;
+                            //stun bite
                         }
                     }
                 }
                 else
                 {
                     self.bodyMode = Player.BodyModeIndex.Default;
+                    // if (initialChunkMasses.Length == self.bodyChunks.Length)
+                    // {
+                    //     for (int i = 0; i < self.bodyChunks.Length; i++)
+                    //     {
+                    //         self.bodyChunks[i].mass = initialChunkMasses[i];
+                    //     }
+                    //     Logger.LogInfo("Reset mass on delatch");
+                    //     UnityEngine.Debug.Log("Leechcat: reset mass on delatch");
+                    // }
+                    latchedChunk = null;
+                    setInitialLatch = false;
                 }
             }
             orig(self, eu);
@@ -519,7 +486,11 @@ namespace SlugTemplate
                     for (int i = 0; i < self.bodyChunks.Length; i++)
                     {
                         BodyChunk bodyChunk = self.bodyChunks[i];
-                        bodyChunk.vel = bodyChunk.vel + ((((Custom.RNV() * self.bodyChunks[i].rad) * 0.4f) * Random.value) * Mathf.Sin(Mathf.InverseLerp(0.3f, -0.3f, self.lungs) * 3.1415927f)) + (((Custom.DegToVec(Mathf.Lerp(-30f, 30f, Random.value)) * Random.value) * (i == self.mainBodyChunkIndex ? 0.4f : 0.2f)) * Mathf.Pow(Mathf.Sin(Mathf.InverseLerp(0.3f, -0.3f, self.lungs) * 3.1415927f), 2f));
+                        bodyChunk.vel = bodyChunk.vel + ((((Custom.RNV() * self.bodyChunks[i].rad) * 0.4f) * Random.value) 
+                                                         * Mathf.Sin(Mathf.InverseLerp(0.3f, -0.3f, self.lungs) * 3.1415927f)) 
+                                                      + (((Custom.DegToVec(Mathf.Lerp(-30f, 30f, Random.value)) * Random.value) 
+                                                          * (i == self.mainBodyChunkIndex ? 0.4f : 0.2f)) 
+                                                         * Mathf.Pow(Mathf.Sin(Mathf.InverseLerp(0.3f, -0.3f, self.lungs) * 3.1415927f), 2f));
                     }
                     // if (self.lungs <= 0f && Random.value < 0.1f)
                     // {
@@ -554,17 +525,5 @@ namespace SlugTemplate
 
             orig(self, crit);
         }
-        
-        // private void LeechLetGoOfLeechCat(On.Leech.orig_Attached orig, Leech self)
-        // {
-        //     BodyChunk grabbedChunk = self.grasps[0].grabbed.bodyChunks[self.grasps[0].chunkGrabbed];
-        //     if (grabbedChunk.owner is Player && (grabbedChunk.owner as Player).SlugCatClass.value == MOD_ID)
-        //     {
-        //         self.LoseAllGrasps();
-        //     }
-        //     UnityEngine.Debug.Log("Leech let go of leechcat!");
-        //     
-        //     orig(self);
-        // }
     }
 }
